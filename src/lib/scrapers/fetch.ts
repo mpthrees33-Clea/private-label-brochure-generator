@@ -1,9 +1,16 @@
 import * as cheerio from "cheerio";
 
+export interface FetchedAnchor {
+  url: string;
+  text: string;
+}
+
 export interface FetchedPage {
   url: string;
   cleanedHtml: string;
   title: string;
+  /** Every anchor on the page (incl. those in nav/footer), absolute URLs only. */
+  anchors: FetchedAnchor[];
 }
 
 // Fetch a factory product page and produce a Claude-friendly HTML
@@ -25,6 +32,24 @@ export async function fetchAndCleanPage(url: string): Promise<FetchedPage> {
   }
   const html = await res.text();
   const $ = cheerio.load(html);
+
+  // Capture every anchor on the page BEFORE chrome-stripping — spec
+  // sheet / downloads links commonly live in the footer.
+  const anchors: FetchedAnchor[] = [];
+  $("a[href]").each((_, el) => {
+    const href = $(el).attr("href");
+    if (!href) return;
+    try {
+      const absolute = new URL(href, url).toString();
+      if (!/^https?:/i.test(absolute)) return;
+      anchors.push({
+        url: absolute,
+        text: ($(el).text() || "").replace(/\s+/g, " ").trim().slice(0, 200),
+      });
+    } catch {
+      // skip non-URL hrefs
+    }
+  });
 
   // Strip page chrome / non-content
   $(
@@ -68,5 +93,5 @@ export async function fetchAndCleanPage(url: string): Promise<FetchedPage> {
   // Collapse whitespace so we don't burn tokens on indentation.
   const title = $("title").text().trim();
   const body = ($("body").html() || "").replace(/\s+/g, " ").trim();
-  return { url, cleanedHtml: body, title };
+  return { url, cleanedHtml: body, title, anchors };
 }
