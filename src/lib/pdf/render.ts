@@ -1,6 +1,12 @@
-import puppeteer, { type Browser, type LaunchOptions } from "puppeteer-core";
+import puppeteer, { type Browser } from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
 import { PDFDocument } from "pdf-lib";
+
+// Recommended @sparticuz/chromium tweaks for serverless: don't link GL
+// libraries we don't ship, and keep headless mode as the package
+// recommends (it returns "shell" on newer versions).
+chromium.setHeadlessMode = true;
+chromium.setGraphicsMode = false;
 
 // Render a brochure page (e.g. /internal/brochure/<id>) to a Letter-size
 // PDF buffer. Asserts page count === 2 — brochures must never silently
@@ -51,16 +57,15 @@ export async function renderBrochurePdf(brochureUrl: string): Promise<Uint8Array
 }
 
 async function launchBrowser(): Promise<Browser> {
-  const opts: LaunchOptions = {
-    args: chromium.args,
-    headless: true,
-  };
-
-  // On Vercel (and any AWS-Lambda-style env) chromium ships in the function
-  // bundle via @sparticuz/chromium. Locally fall back to PUPPETEER_EXECUTABLE_PATH
-  // so a developer with Chrome installed can render too.
+  // On Vercel chromium ships in the function bundle via @sparticuz/chromium.
+  // Locally fall back to PUPPETEER_EXECUTABLE_PATH so a dev with Chrome can render.
   const local = process.env.PUPPETEER_EXECUTABLE_PATH;
-  opts.executablePath = local || (await chromium.executablePath());
+  const executablePath = local || (await chromium.executablePath());
 
-  return puppeteer.launch(opts);
+  return puppeteer.launch({
+    args: chromium.args,
+    defaultViewport: { width: 816, height: 1056 },
+    executablePath,
+    headless: chromium.headless,
+  });
 }
