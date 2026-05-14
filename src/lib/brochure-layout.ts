@@ -6,15 +6,16 @@ export const PAGE_H = 1056;
 export const PAGE_PADDING_X = 48;
 export const CONTENT_W = PAGE_W - 2 * PAGE_PADDING_X; // 720
 
-// Fixed page-2 vertical elements, in px. Update these if the renderer
-// changes the corresponding spacing values.
-const HEADER_H = 119;          // pt-[32px] + h1 64 + mt-1 + tagline
+// Fixed page-2 vertical elements, in px. Conservative estimates — better
+// to leave a small unused gap than to overflow onto page 3.
+const HEADER_H = 122;          // pt-[32px] + h1 64 + mt-1 + tagline
 const BODY_TOP_GAP = 12;       // mt-3
 const SECTION_GAP = 6;         // space-y-1.5
-const SIZE_MATRIX_H = 215;     // typical 5-color matrix with possible 2-line size labels
-const FOOTNOTES_MAX_H = 16;
-const BOTTOM_ROW_H = 88;       // tech specs h3 + table OR contact block (whichever taller)
+const SIZE_MATRIX_H = 230;     // typical 5-color matrix with 2-line size labels
+const FOOTNOTES_MAX_H = 20;
+const BOTTOM_ROW_H = 96;       // tech specs h3 + table OR contact block (whichever taller)
 const BOTTOM_PADDING = 36;     // pb-[36px]
+const SAFETY_BUFFER = 8;       // round-up cushion vs print-time subpixel layout
 
 const SWATCH_LABEL_H = 18;     // mt-1 (4) + text-[11px] line (14)
 const SWATCH_ROW_GAP = 8;      // mt-2 between deco rows
@@ -38,7 +39,8 @@ export function computeSwatchSize(
     SIZE_MATRIX_H +
     FOOTNOTES_MAX_H +
     BOTTOM_ROW_H +
-    BOTTOM_PADDING;
+    BOTTOM_PADDING +
+    SAFETY_BUFFER;
 
   const availV = PAGE_H - fixedV;
   const labelArea = rows * SWATCH_LABEL_H;

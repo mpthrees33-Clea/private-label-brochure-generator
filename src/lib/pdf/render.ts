@@ -92,8 +92,10 @@ export async function renderBrochurePdf(brochureUrl: string): Promise<Uint8Array
     const pdfBytes = await page.pdf({
       format: "Letter",
       printBackground: true,
-      preferCSSPageSize: false,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      // Use the CSS @page rule (letter, margin 0) so Chromium and our
+      // print stylesheet agree on the page geometry.
+      preferCSSPageSize: true,
+      margin: { top: "0", right: "0", bottom: "0", left: "0" },
     });
 
     // 2-page assertion — hard requirement per the project brief.

@@ -8,6 +8,8 @@
 
 html,
 body {
+  margin: 0;
+  padding: 0;
   background-color: #0a0e14;
   color: #f5f9ff;
 }
@@ -24,8 +26,11 @@ body {
 }
 
 @media print {
+  html,
   body {
-    background: #ffffff;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
   }
   .brochure-root {
     gap: 0 !important;
@@ -34,9 +39,12 @@ body {
   }
   .brochure-page {
     box-shadow: none !important;
+    overflow: hidden !important;
     page-break-after: always;
+    break-after: page;
   }
   .brochure-page:last-child {
     page-break-after: auto;
+    break-after: auto;
   }
 }
