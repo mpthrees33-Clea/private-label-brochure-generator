@@ -5,14 +5,35 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
-// GET /api/brochure/pdf?source=preview
-// In future: ?source=<productId>. For now, only the hard-coded
-// preview is wired up; CRUD lands in task #4.
+// GET /api/brochure/pdf
+//   ?source=preview                         → hard-coded Kendall preview
+//   ?source=scrape&url=<factoryUrl>         → scrape + render a real factory
+// (Future: ?source=<productId> once CRUD lands.)
 export async function GET(req: NextRequest) {
   const source = req.nextUrl.searchParams.get("source") ?? "preview";
-  if (source !== "preview") {
+  const factoryUrl = req.nextUrl.searchParams.get("url");
+
+  let renderPath: string;
+  let filename: string;
+  if (source === "preview") {
+    renderPath = "/internal/brochure/preview";
+    filename = "preview.pdf";
+  } else if (source === "scrape") {
+    if (!factoryUrl) {
+      return NextResponse.json(
+        { error: "?source=scrape requires ?url=<factoryUrl>" },
+        { status: 400 },
+      );
+    }
+    renderPath = `/internal/brochure/scrape?url=${encodeURIComponent(factoryUrl)}`;
+    try {
+      filename = new URL(factoryUrl).hostname.replace(/\./g, "-") + ".pdf";
+    } catch {
+      filename = "brochure.pdf";
+    }
+  } else {
     return NextResponse.json(
-      { error: "Only ?source=preview is supported right now." },
+      { error: `Unsupported ?source=${source}` },
       { status: 400 },
     );
   }
@@ -23,7 +44,7 @@ export async function GET(req: NextRequest) {
     process.env.VERCEL || host !== "localhost:3000"
       ? `${protocol}://${host}`
       : `http://${host}`;
-  const target = `${origin}/internal/brochure/${source}`;
+  const target = `${origin}${renderPath}`;
 
   try {
     const pdfBytes = await renderBrochurePdf(target);
@@ -31,7 +52,7 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${source}.pdf"`,
+        "Content-Disposition": `inline; filename="${filename}"`,
         "Cache-Control": "private, no-store",
       },
     });

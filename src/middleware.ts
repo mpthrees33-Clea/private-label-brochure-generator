@@ -5,6 +5,6 @@ export { default } from "next-auth/middleware";
 // (or are public, like /api/brochure/pdf which renders a public preview).
 export const config = {
   matcher: [
-    "/((?!api|login|_next/static|_next/image|favicon\\.ico|brand|sample|internal/brochure).*)",
+    "/((?!api|login|_next/static|_next/image|favicon\\.ico|brand|sample|internal).*)",
   ],
 };
