@@ -18,15 +18,15 @@ export function Brochure({ data }: { data: BrochureData }) {
 function Page1({ data }: { data: BrochureData }) {
   return (
     <section
-      className="brochure-page flex flex-col bg-white shadow-md"
+      className="brochure-page flex flex-col overflow-hidden bg-white shadow-md"
       style={{ width: PAGE_W, height: PAGE_H }}
     >
       <TrinityHeader
         productName={data.trinityName}
         tagline={data.trinityTagline}
       />
-      <div className="mt-6 px-[48px]">
-        {/* Hero is roughly 0.95 aspect ratio in the reference */}
+      <div className="mt-4 px-[48px]">
+        {/* Hero ~0.95 aspect ratio in the reference */}
         <div className="aspect-[19/20] w-full overflow-hidden bg-[#f3f3f3]">
           {data.heroImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -38,7 +38,7 @@ function Page1({ data }: { data: BrochureData }) {
           ) : null}
         </div>
       </div>
-      <div className="mt-6 px-[48px]">
+      <div className="mt-4 px-[48px]">
         <p className="text-[14px] leading-snug text-[#1a1a1a]">
           {data.description}
         </p>
@@ -51,7 +51,7 @@ function Page2({ data }: { data: BrochureData }) {
   const swatch = getSwatchLayout(data);
   return (
     <section
-      className="brochure-page flex flex-col bg-white shadow-md"
+      className="brochure-page flex flex-col overflow-hidden bg-white shadow-md"
       style={{ width: PAGE_W, height: PAGE_H }}
     >
       <TrinityHeader
@@ -89,7 +89,7 @@ function Page2({ data }: { data: BrochureData }) {
       </div>
       {/* Bottom row: tech specs (left) + QR/contact (right) on the same line.
           items-start so the QR top lines up with the tech-specs h3 top. */}
-      <div className="mt-auto flex items-start justify-between gap-6 px-[48px] pb-[36px]">
+      <div className="mt-auto flex items-start justify-between gap-6 px-[48px] pb-[28px]">
         <div className="flex-1 min-w-0">
           <TechSpecsTable specs={data.techSpecs} />
         </div>

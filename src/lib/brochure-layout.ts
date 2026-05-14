@@ -8,18 +8,23 @@ export const CONTENT_W = PAGE_W - 2 * PAGE_PADDING_X; // 720
 
 // Fixed page-2 vertical elements, in px. Conservative estimates — better
 // to leave a small unused gap than to overflow onto page 3.
-const HEADER_H = 122;          // pt-[32px] + h1 64 + mt-1 + tagline
+const HEADER_H = 96;           // pt-[20px] + h1 56*0.95 + mt-1 + tagline ~ 90, +6 cushion
 const BODY_TOP_GAP = 12;       // mt-3
 const SECTION_GAP = 6;         // space-y-1.5
-const SIZE_MATRIX_H = 230;     // typical 5-color matrix with 2-line size labels
-const FOOTNOTES_MAX_H = 20;
-const BOTTOM_ROW_H = 96;       // tech specs h3 + table OR contact block (whichever taller)
-const BOTTOM_PADDING = 36;     // pb-[36px]
-const SAFETY_BUFFER = 8;       // round-up cushion vs print-time subpixel layout
+const MATRIX_HEADER_H = 50;    // sizes h3 + size-icon header row
+const MATRIX_ROW_H = 16;       // one color row
+const FOOTNOTES_MAX_H = 16;
+const BOTTOM_ROW_H = 92;       // tech specs h3 + table OR contact block (whichever taller)
+const BOTTOM_PADDING = 28;     // pb-[28px]
+const SAFETY_BUFFER = 12;      // round-up cushion vs print-time subpixel layout
 
 const SWATCH_LABEL_H = 18;     // mt-1 (4) + text-[11px] line (14)
 const SWATCH_ROW_GAP = 8;      // mt-2 between deco rows
 const SWATCH_GAP_X = 12;       // gap between swatches in a row
+
+function estimateSizeMatrixHeight(colorCount: number): number {
+  return MATRIX_HEADER_H + colorCount * MATRIX_ROW_H;
+}
 
 export interface SwatchLayout {
   width: number;
@@ -44,11 +49,12 @@ export function computeSwatchLayout(
   if (colorCount <= 0) return { width: 0, height: 0, primaryRows: 1, perRow: 0 };
 
   const sectionGaps = 2; // swatches→matrix, matrix→footnotes
+  const sizeMatrixH = estimateSizeMatrixHeight(colorCount);
   const fixedV =
     HEADER_H +
     BODY_TOP_GAP +
     SECTION_GAP * sectionGaps +
-    SIZE_MATRIX_H +
+    sizeMatrixH +
     FOOTNOTES_MAX_H +
     BOTTOM_ROW_H +
     BOTTOM_PADDING +

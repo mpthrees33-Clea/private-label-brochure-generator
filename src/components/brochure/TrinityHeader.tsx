@@ -6,9 +6,9 @@ export function TrinityHeader({
   tagline: string;
 }) {
   return (
-    <header className="flex items-start justify-between px-[48px] pt-[32px]">
+    <header className="flex items-start justify-between px-[48px] pt-[20px]">
       <div>
-        <h1 className="font-brand text-[64px] font-normal leading-none tracking-[-0.02em] lowercase text-brochure-gray">
+        <h1 className="font-brand text-[56px] font-normal leading-[0.95] tracking-[-0.02em] lowercase text-brochure-gray">
           {productName}
         </h1>
         <p className="mt-1 text-[13px] lowercase text-brochure-gray">{tagline}</p>
@@ -17,7 +17,7 @@ export function TrinityHeader({
       <img
         src="/brand/trinity-tile-logo.png"
         alt="trinity tile"
-        className="h-auto w-[120px] object-contain"
+        className="h-auto w-[104px] object-contain"
       />
     </header>
   );
