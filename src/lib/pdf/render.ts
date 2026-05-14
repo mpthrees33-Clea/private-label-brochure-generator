@@ -71,9 +71,10 @@ export async function renderBrochurePdf(brochureUrl: string): Promise<Uint8Array
   const page = await browser.newPage();
   try {
     await page.setViewport({ width: 816, height: 1056, deviceScaleFactor: 2 });
-    await page.goto(brochureUrl, { waitUntil: "networkidle0", timeout: 30000 });
-    // Wait for hero + swatches to actually load (`networkidle0` is a strong
-    // signal, but be extra safe for the lifestyle photo).
+    // domcontentloaded is enough — Next.js RSC streaming keeps a connection
+    // open so networkidle0 would never fire. We manually wait for all images
+    // to finish loading below, which is the actual signal we care about.
+    await page.goto(brochureUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.evaluate(async () => {
       const imgs = Array.from(document.images);
       await Promise.all(
