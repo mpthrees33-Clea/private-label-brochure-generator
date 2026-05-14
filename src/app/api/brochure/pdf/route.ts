@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 // GET /api/brochure/pdf
 //   ?source=preview                         → hard-coded Kendall preview
 //   ?source=scrape&url=<factoryUrl>         → scrape + render a real factory
-// (Future: ?source=<productId> once CRUD lands.)
+//   ?source=<productId>                     → render a saved Product
 export async function GET(req: NextRequest) {
   const source = req.nextUrl.searchParams.get("source") ?? "preview";
   const factoryUrl = req.nextUrl.searchParams.get("url");
@@ -32,10 +32,9 @@ export async function GET(req: NextRequest) {
       filename = "brochure.pdf";
     }
   } else {
-    return NextResponse.json(
-      { error: `Unsupported ?source=${source}` },
-      { status: 400 },
-    );
+    // Treat any other source as a saved product id.
+    renderPath = `/internal/brochure/${encodeURIComponent(source)}`;
+    filename = `${source}.pdf`;
   }
 
   const host = req.headers.get("host") ?? "localhost:3000";

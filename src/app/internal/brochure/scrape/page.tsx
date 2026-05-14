@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Brochure } from "@/components/brochure/Brochure";
 import { scrapeProduct } from "@/lib/scrapers";
 import { scrapedToBrochure } from "@/lib/scraped-to-brochure";
+import { SaveToCrossoverButton } from "./SaveToCrossoverButton";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -28,9 +29,10 @@ export default async function ScrapeRenderPage({
   }
 
   let data;
+  let scraped;
   try {
-    const product = await scrapeProduct(url);
-    data = scrapedToBrochure(product);
+    scraped = await scrapeProduct(url);
+    data = scrapedToBrochure(scraped);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return (
@@ -57,13 +59,21 @@ export default async function ScrapeRenderPage({
         >
           ← Scrape another
         </Link>
-        <Link
-          href={`/api/brochure/pdf?source=scrape&url=${encodeURIComponent(url)}`}
-          target="_blank"
-          className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-white shadow-glow-accent transition hover:bg-accent-light"
-        >
-          Download PDF
-        </Link>
+        <div className="flex items-center gap-2">
+          <SaveToCrossoverButton
+            data={data}
+            factory={scraped.factory}
+            factoryName={scraped.factoryName}
+            factoryUrl={scraped.factoryUrl}
+          />
+          <Link
+            href={`/api/brochure/pdf?source=scrape&url=${encodeURIComponent(url)}`}
+            target="_blank"
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-white shadow-glow-accent transition hover:bg-accent-light"
+          >
+            Download PDF
+          </Link>
+        </div>
       </div>
       <Brochure data={data} />
     </>

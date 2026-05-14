@@ -1,10 +1,9 @@
-export { default } from "next-auth/middleware";
+// V1 demo: NextAuth middleware disabled. Login is gated by the
+// shared password but the auth flow only works once the user sets
+// NEXTAUTH_URL on Vercel. Re-enable by matching real routes here
+// after NEXTAUTH_URL is configured.
+export function middleware() {
+  return;
+}
 
-// Negative-match pattern: everything EXCEPT these paths gets auth-gated.
-// All /api/* routes are excluded — they handle their own auth checks
-// (or are public, like /api/brochure/pdf which renders a public preview).
-export const config = {
-  matcher: [
-    "/((?!api|login|_next/static|_next/image|favicon\\.ico|brand|sample|internal).*)",
-  ],
-};
+export const config = { matcher: [] };
