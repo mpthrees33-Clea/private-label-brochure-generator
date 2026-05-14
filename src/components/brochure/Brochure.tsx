@@ -30,7 +30,8 @@ function Page1({ data }: { data: BrochureData }) {
         tagline={data.trinityTagline}
       />
       <div className="mt-6 px-[48px]">
-        <div className="aspect-[1/1] w-full overflow-hidden bg-[#f3f3f3]">
+        {/* Hero is roughly 0.95 aspect ratio in the reference */}
+        <div className="aspect-[19/20] w-full overflow-hidden bg-[#f3f3f3]">
           {data.heroImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img

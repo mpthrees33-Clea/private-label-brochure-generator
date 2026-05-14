@@ -69,15 +69,14 @@ export function SizeIcon({ kind }: { kind: SizeIconKind }) {
         </svg>
       );
     case "bullnose":
-      // long skinny strip
+      // long skinny strip — matches the reference PDF: plain rectangle, no rounding
       return (
-        <svg viewBox="0 0 60 12" className="h-2 w-12" aria-hidden>
+        <svg viewBox="0 0 60 10" className="h-2 w-12" aria-hidden>
           <rect
             x="0.5"
             y="0.5"
             width="59"
-            height="11"
-            rx="5"
+            height="9"
             fill="none"
             stroke={STROKE}
             strokeWidth="1"

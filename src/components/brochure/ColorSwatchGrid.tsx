@@ -10,7 +10,7 @@ export function ColorSwatchGrid({ colors }: { colors: BrochureColor[] }) {
       <div className="grid gap-x-3 gap-y-1" style={gridStyle}>
         {colors.map((c) => (
           <div key={c.trinityName} className="flex flex-col">
-            <div className="aspect-[3/4] w-full overflow-hidden bg-[#f3f3f3]">
+            <div className="aspect-[1/2] w-full overflow-hidden bg-[#f3f3f3]">
               {c.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -30,7 +30,7 @@ export function ColorSwatchGrid({ colors }: { colors: BrochureColor[] }) {
         <div className="mt-2 grid gap-x-3 gap-y-1" style={gridStyle}>
           {colors.map((c) => (
             <div key={c.trinityName + "-deco"} className="flex flex-col">
-              <div className="aspect-[3/4] w-full overflow-hidden bg-[#f3f3f3]">
+              <div className="aspect-[1/2] w-full overflow-hidden bg-[#f3f3f3]">
                 {c.decoImageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
