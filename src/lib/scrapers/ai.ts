@@ -10,6 +10,7 @@ Rules:
 - Use absolute image URLs (https://...). Pick the cleanest swatch images for "imageUrl" — ideally the standalone color/finish tile photo, not a lifestyle scene.
 - "heroImageUrl" is the best single lifestyle / room-scene image showing the product installed.
 - product name / color names should be reproduced as-is from the factory page (we'll lowercase them downstream).
+- "suggestedTrinityName" is the Trinity-side private-label name. Trinity names US towns/cities: examples already in the catalog are "kendall", "lunett", "oberlin", "torrance". Invent a NEW name in this style — one single lowercase word, evocative of an American place name, that is NOT the factory's product name and NOT any of those 4 examples. Two-syllable place names work best.
 - "iconKind" picks the icon used on the size chart:
   * "rectangle" → standard rectangular field tile (e.g. 12"x24", 24"x48")
   * "square" → 1:1 tile (e.g. 12"x12", 24"x24")
@@ -33,6 +34,11 @@ const TOOL_SCHEMA = {
         type: "string",
         description:
           "Product / collection name as printed on the factory site (e.g. 'Forum', 'Moondance', 'Log').",
+      },
+      suggestedTrinityName: {
+        type: "string",
+        description:
+          "Suggested Trinity-side private-label name. Single lowercase word in the style of an American place name (like Trinity's existing collections kendall, lunett, oberlin, torrance). MUST be different from factoryName.",
       },
       suggestedTagline: {
         type: "string",
@@ -129,6 +135,7 @@ const TOOL_SCHEMA = {
     },
     required: [
       "factoryName",
+      "suggestedTrinityName",
       "suggestedTagline",
       "suggestedDescription",
       "heroImageUrl",
@@ -190,6 +197,10 @@ ${truncated}${truncatedNote}`,
     factory: factory?.display ?? new URL(url).host,
     factoryName: ext.factoryName,
     factoryUrl: url,
+    suggestedTrinityName: normalizeTrinityName(
+      ext.suggestedTrinityName,
+      ext.factoryName,
+    ),
     suggestedTagline: ext.suggestedTagline ?? "",
     suggestedDescription: ext.suggestedDescription ?? "",
     heroImageUrl: ext.heroImageUrl ?? "",
@@ -214,8 +225,33 @@ ${truncated}${truncatedNote}`,
   };
 }
 
+// Trinity reserves a small set of names (their existing catalog).
+// If Claude proposes one of those, fall through to a deterministic
+// fallback derived from the factory name.
+const RESERVED_TRINITY_NAMES = new Set([
+  "kendall",
+  "lunett",
+  "oberlin",
+  "torrance",
+]);
+
+function normalizeTrinityName(suggested: string | undefined, factoryName: string): string {
+  const cleaned = (suggested ?? "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "")
+    .trim();
+  const factoryLower = factoryName.toLowerCase().replace(/\s+/g, "");
+  if (!cleaned || cleaned === factoryLower || RESERVED_TRINITY_NAMES.has(cleaned)) {
+    // Deterministic placeholder so the rep is forced to override it on
+    // the preview page rather than silently shipping a duplicate.
+    return "";
+  }
+  return cleaned;
+}
+
 interface ExtractedShape {
   factoryName: string;
+  suggestedTrinityName?: string;
   suggestedTagline?: string;
   suggestedDescription?: string;
   heroImageUrl?: string;

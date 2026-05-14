@@ -34,6 +34,8 @@ export interface ScrapedProduct {
   factory: string;
   factoryName: string;
   factoryUrl: string;
+  /** Single-word Trinity-style private-label name suggested by the AI. */
+  suggestedTrinityName: string;
   suggestedTagline: string;
   suggestedDescription: string;
   heroImageUrl: string;

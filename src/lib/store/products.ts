@@ -17,7 +17,13 @@ async function load(): Promise<Product[]> {
     loadPromise = (async () => {
       try {
         const buf = await fs.readFile(STORAGE_PATH, "utf8");
-        cache = JSON.parse(buf) as Product[];
+        const existing = JSON.parse(buf) as Product[];
+        // Top up any seed products that aren't already present (lets
+        // us add reference brochures without wiping rep-created data).
+        const existingIds = new Set(existing.map((p) => p.id));
+        const missing = SEED_PRODUCTS.filter((p) => !existingIds.has(p.id));
+        cache = missing.length > 0 ? [...existing, ...missing] : existing;
+        if (missing.length > 0) await persist();
       } catch {
         cache = [...SEED_PRODUCTS];
         await persist();
@@ -46,6 +52,32 @@ export async function listProducts(): Promise<Product[]> {
 export async function getProduct(id: string): Promise<Product | null> {
   const all = await load();
   return all.find((p) => p.id === id) ?? null;
+}
+
+// Strip protocol, www, trailing slash, fragment, and tracking params so
+// e.g. https://www.foo.com/x/ and http://foo.com/x?utm_source=bar match.
+export function normalizeFactoryUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.replace(/^www\./, "").toLowerCase();
+    const path = u.pathname.replace(/\/+$/, "") || "/";
+    const params = new URLSearchParams();
+    u.searchParams.forEach((v, k) => {
+      if (!k.toLowerCase().startsWith("utm_") && k.toLowerCase() !== "fbclid") {
+        params.append(k, v);
+      }
+    });
+    const qs = params.toString();
+    return `${host}${path}${qs ? `?${qs}` : ""}`;
+  } catch {
+    return raw.trim().toLowerCase();
+  }
+}
+
+export async function findByFactoryUrl(url: string): Promise<Product | null> {
+  const target = normalizeFactoryUrl(url);
+  const all = await load();
+  return all.find((p) => normalizeFactoryUrl(p.factoryUrl) === target) ?? null;
 }
 
 export async function createProduct(

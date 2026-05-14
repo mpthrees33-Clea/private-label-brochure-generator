@@ -1,13 +1,16 @@
 import type { BrochureData } from "./brochure-types";
 import type { ScrapedProduct } from "./scrapers/types";
 
-// Convert a freshly-scraped product (factory naming) into the brochure
-// renderer's data shape. Currently maps factoryName → trinityName 1:1;
-// the rep can rename it on the edit page when CRUD lands. All names
-// lowercase to match Trinity's brand style.
-export function scrapedToBrochure(p: ScrapedProduct): BrochureData {
+// Convert a freshly-scraped product into the brochure renderer's data
+// shape. The Trinity private-label name comes from the AI's suggestion,
+// NOT the factory name — that's the whole point of this product. The
+// rep can override the name on the preview page before saving.
+export function scrapedToBrochure(
+  p: ScrapedProduct,
+  trinityNameOverride?: string,
+): BrochureData {
   return {
-    trinityName: p.factoryName.toLowerCase(),
+    trinityName: (trinityNameOverride || p.suggestedTrinityName || "").toLowerCase(),
     trinityTagline: p.suggestedTagline,
     description: p.suggestedDescription,
     heroImageUrl: p.heroImageUrl,
