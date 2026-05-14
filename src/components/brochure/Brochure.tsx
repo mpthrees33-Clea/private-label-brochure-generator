@@ -1,14 +1,10 @@
 import type { BrochureData } from "@/lib/brochure-types";
+import { PAGE_W, PAGE_H, getSwatchSize } from "@/lib/brochure-layout";
 import { TrinityHeader } from "./TrinityHeader";
 import { ColorSwatchGrid } from "./ColorSwatchGrid";
 import { SizeMatrix } from "./SizeMatrix";
 import { TechSpecsTable } from "./TechSpecsTable";
 import { ContactBlock } from "./ContactBlock";
-
-// Letter page in CSS px at 96dpi → 816 x 1056. We render at that exact
-// size so the screen preview matches the eventual PDF output.
-const PAGE_W = 816;
-const PAGE_H = 1056;
 
 export function Brochure({ data }: { data: BrochureData }) {
   return (
@@ -52,6 +48,7 @@ function Page1({ data }: { data: BrochureData }) {
 }
 
 function Page2({ data }: { data: BrochureData }) {
+  const swatch = getSwatchSize(data);
   return (
     <section
       className="brochure-page flex flex-col bg-white shadow-md"
@@ -62,7 +59,7 @@ function Page2({ data }: { data: BrochureData }) {
         tagline={data.trinityTagline}
       />
       <div className="mt-3 space-y-1.5">
-        <ColorSwatchGrid colors={data.colors} />
+        <ColorSwatchGrid colors={data.colors} swatchWidth={swatch.width} />
         <SizeMatrix
           sizes={data.sizes}
           colors={data.colors}
@@ -86,9 +83,9 @@ function Page2({ data }: { data: BrochureData }) {
           </div>
         )}
       </div>
-      {/* Bottom row: tech specs (left) + QR/contact (right) on the same line,
-          aligned to the bottom of the page. */}
-      <div className="mt-auto flex items-end justify-between gap-6 px-[48px] pb-[36px]">
+      {/* Bottom row: tech specs (left) + QR/contact (right) on the same line.
+          items-start so the QR top lines up with the tech-specs h3 top. */}
+      <div className="mt-auto flex items-start justify-between gap-6 px-[48px] pb-[36px]">
         <div className="flex-1 min-w-0">
           <TechSpecsTable specs={data.techSpecs} />
         </div>
