@@ -3,8 +3,8 @@ import type { BrochureColor } from "@/lib/brochure-types";
 // Tile swatches mimic a 12"x24" tile — aspect ratio MUST be 1:2.
 // Never alter the ratio. If page 2 overflows, scale w AND h together
 // or compress non-swatch sections. See feedback_swatch_aspect_ratio.
-const SWATCH_W = 100; // → height = 200 via aspect-[1/2]
-const SWATCH_GAP = 14;
+const SWATCH_W = 108; // → height = 216 via aspect-[1/2]
+const SWATCH_GAP = 12;
 
 export function ColorSwatchGrid({ colors }: { colors: BrochureColor[] }) {
   const hasDeco = colors.some((c) => c.decoImageUrl);
@@ -25,7 +25,7 @@ function SwatchRow({
 }) {
   return (
     <div
-      className={deco ? "mt-2 flex" : "flex"}
+      className={deco ? "mt-2 flex justify-center" : "flex justify-center"}
       style={{ gap: `${SWATCH_GAP}px` }}
     >
       {colors.map((c) => {

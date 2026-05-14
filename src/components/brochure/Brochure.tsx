@@ -61,7 +61,7 @@ function Page2({ data }: { data: BrochureData }) {
         productName={data.trinityName}
         tagline={data.trinityTagline}
       />
-      <div className="mt-4 space-y-2">
+      <div className="mt-3 space-y-1.5">
         <ColorSwatchGrid colors={data.colors} />
         <SizeMatrix
           sizes={data.sizes}
