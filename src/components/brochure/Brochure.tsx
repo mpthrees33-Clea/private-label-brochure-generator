@@ -1,5 +1,11 @@
 import type { BrochureData } from "@/lib/brochure-types";
-import { PAGE_W, PAGE_H, getSwatchLayout } from "@/lib/brochure-layout";
+import {
+  PAGE_W,
+  PAGE_H,
+  HEADER_H,
+  BOTTOM_BLOCK_H,
+  getSwatchLayout,
+} from "@/lib/brochure-layout";
 import { TrinityHeader } from "./TrinityHeader";
 import { ColorSwatchGrid } from "./ColorSwatchGrid";
 import { SizeMatrix } from "./SizeMatrix";
@@ -49,48 +55,62 @@ function Page1({ data }: { data: BrochureData }) {
 
 function Page2({ data }: { data: BrochureData }) {
   const swatch = getSwatchLayout(data);
+  // Middle content (swatches + size matrix) is pinned BETWEEN the header
+  // and the tech-specs block. Its height is bounded, and overflow:hidden
+  // clips anything that doesn't fit. The bottom row is absolutely
+  // positioned so the tech specs CANNOT be pushed off the page no matter
+  // what the middle content does — bulletproof.
+  const middleHeight = PAGE_H - HEADER_H - BOTTOM_BLOCK_H;
   return (
     <section
-      className="brochure-page flex flex-col overflow-hidden bg-white shadow-md"
+      className="brochure-page relative overflow-hidden bg-white shadow-md"
       style={{ width: PAGE_W, height: PAGE_H }}
     >
       <TrinityHeader
         productName={data.trinityName}
         tagline={data.trinityTagline}
       />
-      <div className="mt-3 space-y-1.5">
-        <ColorSwatchGrid
-          colors={data.colors}
-          swatchWidth={swatch.width}
-          perRow={swatch.perRow}
-        />
-        <SizeMatrix
-          sizes={data.sizes}
-          colors={data.colors}
-          availability={data.availability}
-        />
-        {(data.finishLegend.length > 0 || data.footnotes.length > 0) && (
-          <div className="flex justify-between px-[48px] text-[10px] lowercase text-brochure-gray">
-            <div>
-              {data.footnotes.map((f) => (
-                <p key={f}>{f}</p>
-              ))}
+      <div
+        className="overflow-hidden"
+        style={{ height: middleHeight }}
+      >
+        <div className="mt-3 space-y-1.5">
+          <ColorSwatchGrid
+            colors={data.colors}
+            swatchWidth={swatch.width}
+            perRow={swatch.perRow}
+          />
+          <SizeMatrix
+            sizes={data.sizes}
+            colors={data.colors}
+            availability={data.availability}
+          />
+          {(data.finishLegend.length > 0 || data.footnotes.length > 0) && (
+            <div className="flex justify-between px-[48px] text-[10px] lowercase text-brochure-gray">
+              <div>
+                {data.footnotes.map((f) => (
+                  <p key={f}>{f}</p>
+                ))}
+              </div>
+              <div className="flex items-center gap-3">
+                {data.finishLegend.map((l) => (
+                  <span key={l} className="flex items-center gap-1">
+                    <span className="inline-block h-2 w-2 rounded-full bg-brochure-gray" />
+                    {l}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              {data.finishLegend.map((l) => (
-                <span key={l} className="flex items-center gap-1">
-                  <span className="inline-block h-2 w-2 rounded-full bg-brochure-gray" />
-                  {l}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
-      {/* Bottom row: tech specs (left) + QR/contact (right) on the same line.
-          items-start so the QR top lines up with the tech-specs h3 top. */}
-      <div className="mt-auto flex items-start justify-between gap-6 px-[48px] pb-[28px]">
-        <div className="flex-1 min-w-0">
+      {/* Bottom block: pinned to the page bottom, fixed reserved height,
+          overflow-hidden so nothing inside can extend past it either. */}
+      <div
+        className="absolute left-0 right-0 bottom-0 overflow-hidden flex items-start justify-between gap-6 px-[48px] pb-[28px]"
+        style={{ height: BOTTOM_BLOCK_H }}
+      >
+        <div className="flex-1 min-w-0 overflow-hidden">
           <TechSpecsTable specs={data.techSpecs} />
         </div>
         <ContactBlock />

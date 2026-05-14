@@ -6,17 +6,20 @@ export const PAGE_H = 1056;
 export const PAGE_PADDING_X = 48;
 export const CONTENT_W = PAGE_W - 2 * PAGE_PADDING_X; // 720
 
-// Fixed page-2 vertical elements, in px. Conservative estimates — better
-// to leave a small unused gap than to overflow onto page 3.
-const HEADER_H = 100;          // pt-[20px] + h1 56*0.95 + mt-1 + tagline ~ 96, +4 cushion
-const BODY_TOP_GAP = 12;       // mt-3
-const SECTION_GAP = 6;         // space-y-1.5
-const MATRIX_HEADER_H = 68;    // sizes h3 (~18) + size-icon header row with thickness (~50)
-const MATRIX_ROW_H = 22;       // py-1 (8) + text 10 + border-b 1 + cushion
+// Page-2 vertical geometry. The bottom row (tech specs + QR) is now
+// pinned to the bottom edge with absolute positioning at exactly
+// BOTTOM_BLOCK_H tall. The middle content area (swatches + matrix) is
+// clipped to fit between header and bottom row — overflow never reaches
+// the tech-specs row, which is the bulletproof guarantee the rep asked
+// for.
+export const HEADER_H = 100;       // pt-[20px] + h1 56*0.95 + mt-1 + tagline
+export const BOTTOM_BLOCK_H = 168; // fixed bottom-row height (tech specs + contact + padding)
+const BODY_TOP_GAP = 12;           // mt-3 below header
+const SECTION_GAP = 6;             // space-y-1.5
+const MATRIX_HEADER_H = 68;        // sizes h3 (~18) + icon row (~50)
+const MATRIX_ROW_H = 22;           // py-1 (8) + text 10 + border-b 1 + cushion
 const FOOTNOTES_MAX_H = 16;
-const BOTTOM_ROW_H = 102;      // tech specs h3 + header band + standard row + data row ~96
-const BOTTOM_PADDING = 28;     // pb-[28px]
-const SAFETY_BUFFER = 20;      // round-up cushion vs print-time subpixel layout
+const SAFETY_BUFFER = 20;
 
 const SWATCH_LABEL_H = 18;     // mt-1 (4) + text-[11px] line (14)
 const SWATCH_ROW_GAP = 8;      // mt-2 between deco rows
@@ -56,8 +59,7 @@ export function computeSwatchLayout(
     SECTION_GAP * sectionGaps +
     sizeMatrixH +
     FOOTNOTES_MAX_H +
-    BOTTOM_ROW_H +
-    BOTTOM_PADDING +
+    BOTTOM_BLOCK_H +
     SAFETY_BUFFER;
   const availV = PAGE_H - fixedV;
 
