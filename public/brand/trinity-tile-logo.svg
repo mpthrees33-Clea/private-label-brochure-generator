@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" width="120" height="140">
+  <!-- Placeholder Trinity Tile mark.
+       Approximation of the logo seen on the reference brochures:
+       a blue square frame with a notched/offset inner square.
+       Replace with the real logo SVG when the user supplies it. -->
+  <g fill="none" stroke="#177AA9" stroke-width="6">
+    <rect x="14" y="14" width="80" height="80" />
+    <rect x="36" y="36" width="36" height="36" fill="#177AA9" />
+  </g>
+  <text x="60" y="128" text-anchor="middle" font-family="Montserrat, sans-serif"
+        font-size="14" fill="#3a3a3a" font-weight="500">trinity tile</text>
+</svg>

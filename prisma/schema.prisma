@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id             String   @id @default(cuid())
+  trinityName    String
+  trinityTagline String
+  description    String
+  heroImageUrl   String
+  factory        String
+  factoryName    String
+  factoryUrl     String
+  // JSON fields stored as strings on SQLite. Helpers in src/lib/db.ts.
+  availability   String   // JSON: { "white": ["12x24",...] }
+  finishLegend   String   // JSON: ["matte","textured"]
+  footnotes      String   // JSON: ["*not recommended for floors"]
+  techSpecs      String   // JSON: { thickness, shadeVariation, ... }
+  brochureUrl    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdBy      String?
+  colors         Color[]
+  sizes          Size[]
+}
+
+model Color {
+  id           String  @id @default(cuid())
+  productId    String
+  product      Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  trinityName  String
+  factoryName  String
+  imageUrl     String
+  decoImageUrl String?
+  sortOrder    Int
+
+  @@index([productId])
+}
+
+model Size {
+  id          String  @id @default(cuid())
+  productId   String
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label       String
+  thickness   String?
+  iconKind    String  // rectangle | square | plank | mosaic | bullnose
+  isDeco      Boolean @default(false)
+  footnoteRef String?
+  sortOrder   Int
+
+  @@index([productId])
+}
+
+model ScrapeCache {
+  id        String   @id @default(cuid())
+  url       String   @unique
+  data      String   // JSON ScrapedProduct
+  createdAt DateTime @default(now())
+}

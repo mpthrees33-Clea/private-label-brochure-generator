@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #0a0e14;
+  color: #f5f9ff;
+}
+
+/* Brochure print stylesheet — only applies under /internal/brochure */
+.brochure-root {
+  background: #ffffff;
+  color: #1a1a1a;
+}
+
+@page {
+  size: letter;
+  margin: 0;
+}
+
+@media print {
+  body {
+    background: #ffffff;
+  }
+  .brochure-page {
+    page-break-after: always;
+  }
+  .brochure-page:last-child {
+    page-break-after: auto;
+  }
+}
