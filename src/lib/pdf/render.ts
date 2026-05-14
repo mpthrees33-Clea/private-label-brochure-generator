@@ -10,9 +10,17 @@ import { PDFDocument } from "pdf-lib";
 const CHROMIUM_PACK_URL =
   "https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar";
 
-// Setters exist at runtime but aren't in chromium-min's types.
-(chromium as unknown as { setHeadlessMode: boolean }).setHeadlessMode = true;
-(chromium as unknown as { setGraphicsMode: boolean }).setGraphicsMode = false;
+// chromium-min has loose types — these properties exist at runtime
+// (setters that flip internal flags + a readonly `headless` field)
+// but aren't declared. Cast to a permissive shape for access.
+type ChromiumExtras = {
+  setHeadlessMode: boolean;
+  setGraphicsMode: boolean;
+  readonly headless: boolean | "shell";
+};
+const chromiumExt = chromium as unknown as ChromiumExtras;
+chromiumExt.setHeadlessMode = true;
+chromiumExt.setGraphicsMode = false;
 
 // Render a brochure page (e.g. /internal/brochure/<id>) to a Letter-size
 // PDF buffer. Asserts page count === 2 — brochures must never silently
@@ -72,6 +80,6 @@ async function launchBrowser(): Promise<Browser> {
     args: chromium.args,
     defaultViewport: { width: 816, height: 1056 },
     executablePath,
-    headless: chromium.headless,
+    headless: chromiumExt.headless === "shell" ? "shell" : true,
   });
 }
