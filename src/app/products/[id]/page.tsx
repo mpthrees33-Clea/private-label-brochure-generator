@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProduct } from "@/lib/store/products";
+import { listLessonsForProduct } from "@/lib/store/lessons";
 import { Brochure } from "@/components/brochure/Brochure";
-import { Download, FileEdit, Trash2 } from "lucide-react";
+import { Download, FileEdit } from "lucide-react";
 import { DeleteProductButton } from "./DeleteProductButton";
+import { EditChat } from "./EditChat";
 
 export const dynamic = "force-dynamic";
 
@@ -14,9 +16,10 @@ export default async function ProductDetailPage({
 }) {
   const product = await getProduct(params.id);
   if (!product) notFound();
+  const lessons = await listLessonsForProduct(product.id);
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8 text-fg">
+    <main className="mx-auto max-w-[1400px] px-6 py-8 text-fg">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <Link
@@ -47,7 +50,7 @@ export default async function ProductDetailPage({
             className="rounded-md border border-divider bg-surface px-3 py-1.5 text-sm font-medium transition hover:border-accent"
           >
             <FileEdit className="mr-1 inline h-4 w-4" />
-            Edit
+            Edit fields
           </Link>
           <Link
             href={`/api/brochure/pdf?source=${product.id}`}
@@ -61,7 +64,14 @@ export default async function ProductDetailPage({
         </div>
       </header>
 
-      <Brochure data={product} />
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        <div className="shrink-0">
+          <Brochure data={product} />
+        </div>
+        <aside className="w-full lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:flex-1 lg:overflow-y-auto">
+          <EditChat productId={product.id} initialLessons={lessons} />
+        </aside>
+      </div>
     </main>
   );
 }

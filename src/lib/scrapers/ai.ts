@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ScrapedProduct, SizeIcon } from "./types";
 import { factoryFromUrl } from "../factories";
+import { relevantLessonsForScrape } from "../store/lessons";
 
 const SYSTEM_PROMPT = `You extract structured tile / flooring product info from factory product pages for the Trinity Surfaces private-label brochure generator.
 
@@ -166,12 +167,24 @@ export async function scrapeWithAI(
       ? `\n\n[note: HTML truncated from ${cleanedHtml.length} to ${MAX_HTML_CHARS} chars]`
       : "";
 
+  // Inject the most-relevant lessons reps have already taught us via the
+  // /products/[id] edit chat. Same-factory lessons rank highest. This
+  // is how the scraper learns over time.
+  const host = new URL(url).hostname.replace(/^www\./, "");
+  const lessons = await relevantLessonsForScrape(host).catch(() => []);
+  const lessonsBlock =
+    lessons.length > 0
+      ? `\n\nLearned rules from past rep corrections (apply these going forward):\n${lessons
+          .map((l, i) => `${i + 1}. ${l.summary}`)
+          .join("\n")}`
+      : "";
+
   // TODO: add prompt caching once we bump @anthropic-ai/sdk past 0.30 —
   // current typings don't accept cache_control on text blocks/tools.
   const message = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,
-    system: SYSTEM_PROMPT,
+    system: SYSTEM_PROMPT + lessonsBlock,
     tools: [TOOL_SCHEMA as unknown as Anthropic.Tool],
     tool_choice: { type: "tool", name: "extract_product" },
     messages: [
