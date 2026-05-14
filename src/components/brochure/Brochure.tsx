@@ -1,5 +1,5 @@
 import type { BrochureData } from "@/lib/brochure-types";
-import { PAGE_W, PAGE_H, getSwatchSize } from "@/lib/brochure-layout";
+import { PAGE_W, PAGE_H, getSwatchLayout } from "@/lib/brochure-layout";
 import { TrinityHeader } from "./TrinityHeader";
 import { ColorSwatchGrid } from "./ColorSwatchGrid";
 import { SizeMatrix } from "./SizeMatrix";
@@ -48,7 +48,7 @@ function Page1({ data }: { data: BrochureData }) {
 }
 
 function Page2({ data }: { data: BrochureData }) {
-  const swatch = getSwatchSize(data);
+  const swatch = getSwatchLayout(data);
   return (
     <section
       className="brochure-page flex flex-col bg-white shadow-md"
@@ -59,7 +59,11 @@ function Page2({ data }: { data: BrochureData }) {
         tagline={data.trinityTagline}
       />
       <div className="mt-3 space-y-1.5">
-        <ColorSwatchGrid colors={data.colors} swatchWidth={swatch.width} />
+        <ColorSwatchGrid
+          colors={data.colors}
+          swatchWidth={swatch.width}
+          perRow={swatch.perRow}
+        />
         <SizeMatrix
           sizes={data.sizes}
           colors={data.colors}

@@ -21,16 +21,28 @@ const SWATCH_LABEL_H = 18;     // mt-1 (4) + text-[11px] line (14)
 const SWATCH_ROW_GAP = 8;      // mt-2 between deco rows
 const SWATCH_GAP_X = 12;       // gap between swatches in a row
 
-// Compute the largest 1:2 swatch that fits in page 2 given the color count
-// and whether a deco row is present. Swatches are sized as large as
-// reasonable so the size matrix nestles right above the tech-specs row.
-export function computeSwatchSize(
+export interface SwatchLayout {
+  width: number;
+  height: number;
+  /** Number of PRIMARY rows. If hasDeco, total visual rows = primaryRows * 2. */
+  primaryRows: number;
+  /** Colors per primary row (last row may have fewer). */
+  perRow: number;
+}
+
+// Compute the swatch layout: how many primary rows to use and the
+// largest 1:2 swatch that fits inside page 2. We try 1..MAX_ROWS rows
+// and pick the row count that yields the largest swatch — that way the
+// grid wraps automatically when there are too many colors to fit
+// horizontally at a reasonable size (Bestow case).
+const MAX_PRIMARY_ROWS = 3;
+
+export function computeSwatchLayout(
   colorCount: number,
   hasDeco: boolean,
-): { width: number; height: number } {
-  if (colorCount <= 0) return { width: 0, height: 0 };
+): SwatchLayout {
+  if (colorCount <= 0) return { width: 0, height: 0, primaryRows: 1, perRow: 0 };
 
-  const rows = hasDeco ? 2 : 1;
   const sectionGaps = 2; // swatches→matrix, matrix→footnotes
   const fixedV =
     HEADER_H +
@@ -41,24 +53,34 @@ export function computeSwatchSize(
     BOTTOM_ROW_H +
     BOTTOM_PADDING +
     SAFETY_BUFFER;
-
   const availV = PAGE_H - fixedV;
-  const labelArea = rows * SWATCH_LABEL_H;
-  const rowGapTotal = (rows - 1) * SWATCH_ROW_GAP;
-  const availImagesV = Math.max(0, availV - labelArea - rowGapTotal);
-  const maxImageH = Math.max(60, Math.floor(availImagesV / rows));
 
-  const maxImageW = Math.max(
-    60,
-    Math.floor((CONTENT_W - SWATCH_GAP_X * (colorCount - 1)) / colorCount),
-  );
+  let best: SwatchLayout = { width: 0, height: 0, primaryRows: 1, perRow: colorCount };
 
-  // Maintain 1:2 ratio — never distort. Pick the smaller of the two limits.
-  const w = Math.min(maxImageW, Math.floor(maxImageH / 2));
-  return { width: w, height: w * 2 };
+  for (let primaryRows = 1; primaryRows <= MAX_PRIMARY_ROWS; primaryRows++) {
+    const perRow = Math.ceil(colorCount / primaryRows);
+    const visualRows = primaryRows * (hasDeco ? 2 : 1);
+    const labelArea = visualRows * SWATCH_LABEL_H;
+    const rowGapTotal = (visualRows - 1) * SWATCH_ROW_GAP;
+    const availImagesV = Math.max(0, availV - labelArea - rowGapTotal);
+    const maxImageH = Math.floor(availImagesV / visualRows);
+
+    const maxImageW = Math.floor(
+      (CONTENT_W - SWATCH_GAP_X * (perRow - 1)) / perRow,
+    );
+
+    // Maintain 1:2 ratio — never distort.
+    const w = Math.max(0, Math.min(maxImageW, Math.floor(maxImageH / 2)));
+
+    if (w > best.width) {
+      best = { width: w, height: w * 2, primaryRows, perRow };
+    }
+  }
+
+  return best;
 }
 
-export function getSwatchSize(data: BrochureData) {
+export function getSwatchLayout(data: BrochureData): SwatchLayout {
   const hasDeco = data.colors.some((c) => c.decoImageUrl);
-  return computeSwatchSize(data.colors.length, hasDeco);
+  return computeSwatchLayout(data.colors.length, hasDeco);
 }
