@@ -25,10 +25,51 @@ chromiumExt.setGraphicsMode = false;
 // Render a brochure page (e.g. /internal/brochure/<id>) to a Letter-size
 // PDF buffer. Asserts page count === 2 — brochures must never silently
 // truncate the tech specs or spill onto page 3. See feedback_brochure_two_pages.
+// Cache the browser PROMISE (not the resolved browser) so concurrent
+// requests on a warm function instance share one launch. Closing the
+// browser between invocations is what causes ETXTBSY in the first
+// place — we keep it warm and only close pages.
+let browserPromise: Promise<Browser> | null = null;
+
+async function getBrowser(): Promise<Browser> {
+  const existing = browserPromise && (await browserPromise.catch(() => null));
+  if (existing && existing.connected) return existing;
+  browserPromise = launchBrowserWithRetry();
+  return browserPromise;
+}
+
+async function launchBrowserWithRetry(maxRetries = 4): Promise<Browser> {
+  const local = process.env.PUPPETEER_EXECUTABLE_PATH;
+  const executablePath = local || (await chromium.executablePath(CHROMIUM_PACK_URL));
+
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await puppeteer.launch({
+        args: chromium.args,
+        defaultViewport: { width: 816, height: 1056 },
+        executablePath,
+        headless: chromiumExt.headless === "shell" ? "shell" : true,
+      });
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      // ETXTBSY = chromium binary still being written to /tmp.
+      // EBUSY = similar fs lock issue.
+      if (msg.includes("ETXTBSY") || msg.includes("EBUSY")) {
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
 export async function renderBrochurePdf(brochureUrl: string): Promise<Uint8Array> {
-  const browser = await launchBrowser();
+  const browser = await getBrowser();
+  const page = await browser.newPage();
   try {
-    const page = await browser.newPage();
     await page.setViewport({ width: 816, height: 1056, deviceScaleFactor: 2 });
     await page.goto(brochureUrl, { waitUntil: "networkidle0", timeout: 30000 });
     // Wait for hero + swatches to actually load (`networkidle0` is a strong
@@ -66,20 +107,7 @@ export async function renderBrochurePdf(brochureUrl: string): Promise<Uint8Array
 
     return pdfBytes;
   } finally {
-    await browser.close();
+    // Close the page but keep the browser warm for the next invocation.
+    await page.close().catch(() => {});
   }
-}
-
-async function launchBrowser(): Promise<Browser> {
-  // Local dev: use system Chrome if PUPPETEER_EXECUTABLE_PATH is set.
-  // Production: download chromium + libs from GitHub at request time.
-  const local = process.env.PUPPETEER_EXECUTABLE_PATH;
-  const executablePath = local || (await chromium.executablePath(CHROMIUM_PACK_URL));
-
-  return puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: { width: 816, height: 1056 },
-    executablePath,
-    headless: chromiumExt.headless === "shell" ? "shell" : true,
-  });
 }
