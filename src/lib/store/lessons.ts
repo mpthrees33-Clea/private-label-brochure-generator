@@ -1,10 +1,10 @@
-import { promises as fs } from "fs";
-import path from "path";
+import { readJsonStore, writeJsonStore } from "./blob-storage";
 import type { BrochureData } from "../brochure-types";
 
-// Plain JSON store, same pattern as products. Real durable storage
-// arrives when the user provisions Postgres.
-const STORAGE_PATH = path.join("/tmp", "quick-flip-lessons.json");
+// Lessons are read-through against Vercel Blob (or /tmp locally). Same
+// rationale as the products store — a Lesson created on instance A must
+// be visible to the AI scraper running on any other instance.
+const PATHNAME = "store/lessons.json";
 
 export interface Lesson {
   id: string;
@@ -23,32 +23,12 @@ export interface Lesson {
   createdAt: string;
 }
 
-let cache: Lesson[] | null = null;
-let loadPromise: Promise<Lesson[]> | null = null;
-
 async function load(): Promise<Lesson[]> {
-  if (cache) return cache;
-  if (!loadPromise) {
-    loadPromise = (async () => {
-      try {
-        const buf = await fs.readFile(STORAGE_PATH, "utf8");
-        cache = JSON.parse(buf) as Lesson[];
-      } catch {
-        cache = [];
-      }
-      return cache!;
-    })();
-  }
-  return loadPromise;
+  return readJsonStore<Lesson[]>(PATHNAME, []);
 }
 
-async function persist(): Promise<void> {
-  if (!cache) return;
-  try {
-    await fs.writeFile(STORAGE_PATH, JSON.stringify(cache, null, 2));
-  } catch {
-    // /tmp may not be writable in some local dev contexts
-  }
+async function save(all: Lesson[]): Promise<void> {
+  await writeJsonStore(PATHNAME, all);
 }
 
 export async function listLessons(): Promise<Lesson[]> {
@@ -73,8 +53,7 @@ export async function createLesson(
     createdAt: new Date().toISOString(),
   };
   all.push(lesson);
-  cache = all;
-  await persist();
+  await save(all);
   return lesson;
 }
 

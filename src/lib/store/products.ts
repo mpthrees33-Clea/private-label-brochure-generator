@@ -1,47 +1,37 @@
-import { promises as fs } from "fs";
-import path from "path";
 import { SEED_PRODUCTS } from "./seed";
+import { readJsonStore, writeJsonStore } from "./blob-storage";
 import type { Product } from "./types";
 
-// Plain JSON store on /tmp. Survives within a warm serverless instance
-// (~15 min idle on Vercel). Cold starts re-seed. Real durable storage
-// arrives once the user provisions Postgres / Neon.
-const STORAGE_PATH = path.join("/tmp", "quick-flip-products.json");
-
-let cache: Product[] | null = null;
-let loadPromise: Promise<Product[]> | null = null;
+// Products are stored as a single JSON blob ("store/products.json").
+// Vercel Blob in prod, /tmp file locally. The store is read on every
+// request — no long-lived in-memory cache — so a save on instance A is
+// immediately visible from instance B. Necessary to fix the "404 after
+// save" bug where the redirected GET landed on a different instance
+// than the POST that created the product.
+const PATHNAME = "store/products.json";
 
 async function load(): Promise<Product[]> {
-  if (cache) return cache;
-  if (!loadPromise) {
-    loadPromise = (async () => {
-      try {
-        const buf = await fs.readFile(STORAGE_PATH, "utf8");
-        const existing = JSON.parse(buf) as Product[];
-        // Top up any seed products that aren't already present (lets
-        // us add reference brochures without wiping rep-created data).
-        const existingIds = new Set(existing.map((p) => p.id));
-        const missing = SEED_PRODUCTS.filter((p) => !existingIds.has(p.id));
-        cache = missing.length > 0 ? [...existing, ...missing] : existing;
-        if (missing.length > 0) await persist();
-      } catch {
-        cache = [...SEED_PRODUCTS];
-        await persist();
-      }
-      return cache!;
-    })();
+  const products = await readJsonStore<Product[] | null>(PATHNAME, null);
+  if (products && products.length > 0) {
+    // Top-up: add any newly-introduced seed products that aren't yet
+    // persisted. Existing rep-edited rows are preserved.
+    const existingIds = new Set(products.map((p) => p.id));
+    const missingSeeds = SEED_PRODUCTS.filter((p) => !existingIds.has(p.id));
+    if (missingSeeds.length > 0) {
+      const merged = [...products, ...missingSeeds];
+      await writeJsonStore(PATHNAME, merged);
+      return merged;
+    }
+    return products;
   }
-  return loadPromise;
+  // First run — seed.
+  const seeded = [...SEED_PRODUCTS];
+  await writeJsonStore(PATHNAME, seeded);
+  return seeded;
 }
 
-async function persist(): Promise<void> {
-  if (!cache) return;
-  try {
-    await fs.writeFile(STORAGE_PATH, JSON.stringify(cache, null, 2));
-  } catch {
-    // /tmp may not be writable in some local dev contexts; silently
-    // fall back to in-memory only.
-  }
+async function save(all: Product[]): Promise<void> {
+  await writeJsonStore(PATHNAME, all);
 }
 
 export async function listProducts(): Promise<Product[]> {
@@ -92,8 +82,7 @@ export async function createProduct(
     updatedAt: now,
   };
   all.push(product);
-  cache = all;
-  await persist();
+  await save(all);
   return product;
 }
 
@@ -112,15 +101,14 @@ export async function updateProduct(
     updatedAt: new Date().toISOString(),
   };
   all[idx] = updated;
-  cache = all;
-  await persist();
+  await save(all);
   return updated;
 }
 
 export async function deleteProduct(id: string): Promise<void> {
   const all = await load();
-  cache = all.filter((p) => p.id !== id);
-  await persist();
+  const remaining = all.filter((p) => p.id !== id);
+  await save(remaining);
 }
 
 function randomId(): string {

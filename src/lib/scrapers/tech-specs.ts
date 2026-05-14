@@ -53,11 +53,24 @@ const TOOL_SCHEMA = {
 
 const SYSTEM_PROMPT = `You extract technical specifications from tile / porcelain / ceramic product spec sheets, technical-data pages, and downloadable product brochures.
 
-Return the answer by calling extract_tech_specs exactly once. Use null for any spec not stated in the document. Preserve printed units exactly ("≤ 0.5%", "≥ 450 lbf", "v3", "8mm").
+Return the answer by calling extract_tech_specs exactly once. Use null for any spec not stated in the document.
+
+OUTPUT VALUES MUST BE SHORT — match Trinity Surfaces brochure brevity. Strip all commentary, parentheticals, footnote markers, and prose. Allowed patterns ONLY:
+- thickness: "8mm" | "9mm" | "9.5mm" | "6mm - 9.5mm" | "9.5mm | 8.5mm"
+- shadeVariation: "v1" | "v2" | "v3" | "v4" | "v2-v3"
+- waterAbsorption: "≤ 0.5%" | "≤ 0.1%"
+- frostResistance: "resistant"
+- stainResistance: "resistant" | "class 5"
+- chemicalResistance: "resistant" | "class a"
+- scratchHardness: "7" | "8" (single digit only, no "Mohs" prefix)
+- breakingStrength: "≥ 450 lbf" | "≥ 250 lbs"
+- dcof: "≥ 0.42 wet" | "≥ 0.50 wet" | "matte ≥ 0.50 wet | grip ≥ 0.55 wet"
+
+NEVER include things like "select sizes ≥ 0.42 dry", "matte" / "EW grip" qualifiers other than what's in the patterns above, "C373" codes, or footnote markers. If a value would need clarification, omit the clarification — just give the core number.
 
 Common label aliases on factory spec sheets:
 - "thickness" / "nominal thickness" / "tile thickness" → thickness
-- "shade variation" / "V1/V2/V3/V4" / "aesthetic variation" / "ISO 10545-2" → shadeVariation
+- "shade variation" / "V1-V4" / "aesthetic variation" / "ISO 10545-2" → shadeVariation
 - "water absorption" / "ISO 10545-3" → waterAbsorption
 - "frost resistance" / "freeze-thaw" / "ISO 10545-12" → frostResistance
 - "stain resistance" / "ISO 10545-14" → stainResistance

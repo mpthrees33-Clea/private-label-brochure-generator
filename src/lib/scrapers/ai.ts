@@ -20,7 +20,17 @@ Rules:
   * "bullnose" → long skinny trim piece (e.g. 3"x24" bullnose)
 - "isDeco" is true for the decorative / textured variant of a standard size.
 - "availability" maps each color name → the size labels available in that color. If unsure, list every size for every color.
-- "techSpecs" values keep their units exactly as printed ("≤ 0.5%", "≥ 450 lbf", "v3", "8mm", etc.). Use null for any spec not stated.
+- "techSpecs" values must be SHORT and stripped of commentary. Match the Trinity reference brevity exactly. Use the printed units, no extra words. Examples (these are the only patterns; copy them):
+  * thickness: "8mm" | "9mm" | "9.5mm" | "6mm - 9.5mm" | "9.5mm | 8.5mm"
+  * shadeVariation: "v1" | "v2" | "v3" | "v4" | "v2-v3"
+  * waterAbsorption: "≤ 0.5%" | "≤ 0.1%"
+  * frostResistance: "resistant"
+  * stainResistance: "resistant" | "class 5"
+  * chemicalResistance: "resistant" | "class a"
+  * scratchHardness: "7" | "8" (single digit, no "Mohs" prefix)
+  * breakingStrength: "≥ 450 lbf" | "≥ 250 lbs"
+  * dcof: "≥ 0.42 wet" | "≥ 0.50 wet" | "matte ≥ 0.50 wet | grip ≥ 0.55 wet"
+  Use null for any spec not stated. NEVER add prose like "select sizes" or "(IW+)" — keep it terse.
 - "finishLegend" defaults to ["matte"] if not specified. Use ["matte", "textured"] etc. if the page mentions multiple finishes.
 - Be conservative — if data isn't on the page, set the field to null / empty array. Do not invent specs.`;
 

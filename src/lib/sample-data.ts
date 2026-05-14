@@ -65,7 +65,7 @@ export const KENDALL_SAMPLE: BrochureData = {
     chemicalResistance: "resistant",
     scratchHardness: "7",
     breakingStrength: "≥ 450 lbf",
-    dcof: "≥ 0.42, IW+",
+    dcof: "≥ 0.42 wet",
   },
 };
 
@@ -108,7 +108,7 @@ export const LUNETT_SAMPLE: BrochureData = {
     chemicalResistance: "resistant",
     scratchHardness: "7",
     breakingStrength: "≥ 450 lbf",
-    dcof: "≥ 0.42 IW+ matte / EW grip",
+    dcof: "matte ≥ 0.42 wet | grip ≥ 0.42 wet",
   },
 };
 
@@ -162,7 +162,7 @@ export const OBERLIN_SAMPLE: BrochureData = {
     frostResistance: "resistant",
     stainResistance: "class 5",
     chemicalResistance: "class a",
-    dcof: "matte ≥ 0.50 wet / grip ≥ 0.55 wet (select sizes ≥ 0.42 dry)",
+    dcof: "matte ≥ 0.50 wet | grip ≥ 0.55 wet",
   },
 };
 
