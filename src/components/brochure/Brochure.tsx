@@ -6,22 +6,42 @@ import {
   BOTTOM_BLOCK_H,
   getSwatchLayout,
 } from "@/lib/brochure-layout";
+import { renderDescription } from "@/lib/brochure-description";
 import { TrinityHeader } from "./TrinityHeader";
 import { ColorSwatchGrid } from "./ColorSwatchGrid";
 import { SizeMatrix } from "./SizeMatrix";
 import { TechSpecsTable } from "./TechSpecsTable";
 import { ContactBlock } from "./ContactBlock";
 
-export function Brochure({ data }: { data: BrochureData }) {
+export function Brochure({
+  data,
+  factoryName,
+}: {
+  data: BrochureData;
+  /** Optional: enables the safety-net replacement of any literal factory
+   * name occurrence in the description. */
+  factoryName?: string;
+}) {
   return (
     <div className="brochure-root flex flex-col items-center gap-6 bg-[#e6e8eb] py-6">
-      <Page1 data={data} />
+      <Page1 data={data} factoryName={factoryName} />
       <Page2 data={data} />
     </div>
   );
 }
 
-function Page1({ data }: { data: BrochureData }) {
+function Page1({
+  data,
+  factoryName,
+}: {
+  data: BrochureData;
+  factoryName?: string;
+}) {
+  const renderedDescription = renderDescription(
+    data.description,
+    data.trinityName,
+    factoryName,
+  );
   return (
     <section
       className="brochure-page flex flex-col overflow-hidden bg-white shadow-md"
@@ -46,7 +66,7 @@ function Page1({ data }: { data: BrochureData }) {
       </div>
       <div className="mt-4 px-[48px]">
         <p className="text-[14px] leading-snug text-[#1a1a1a]">
-          {data.description}
+          {renderedDescription}
         </p>
       </div>
     </section>

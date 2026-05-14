@@ -12,6 +12,7 @@ Rules:
 - "heroImageUrl" is the best single lifestyle / room-scene image showing the product installed.
 - product name / color names should be reproduced as-is from the factory page (we'll lowercase them downstream).
 - "suggestedTrinityName" is the Trinity-side private-label name. Trinity names US towns/cities: examples already in the catalog are "kendall", "lunett", "oberlin", "torrance". Invent a NEW name in this style — one single lowercase word, evocative of an American place name, that is NOT the factory's product name and NOT any of those 4 examples. Two-syllable place names work best.
+- "suggestedDescription" must be REWRITTEN in Trinity's voice — NEVER copied or paraphrased verbatim from the factory page (the factory's copy is the factory's brand, not Trinity's). Wherever the product name would appear in the description, write the literal token "{{name}}" (with the curly braces) instead of any name. The token is substituted with the Trinity name at render time, so even if the rep later renames it, the description stays consistent. Reference style: "{{name}} captures the raw elegance of poured concrete with soft gradients, subtle texture, and five refined neutrals." Two short sentences, 30-60 words, commercial-flooring tone, no mention of any factory name.
 - "iconKind" picks the icon used on the size chart:
   * "rectangle" → standard rectangular field tile (e.g. 12"x24", 24"x48")
   * "square" → 1:1 tile (e.g. 12"x12", 24"x24")
@@ -58,7 +59,8 @@ const TOOL_SCHEMA = {
       },
       suggestedDescription: {
         type: "string",
-        description: "2–3 sentence marketing paragraph describing the product.",
+        description:
+          "2 short sentences, 30-60 words, Trinity's voice. Use the literal token \"{{name}}\" wherever the product name would appear — NEVER write the factory's product name. Example: \"{{name}} captures the raw elegance of poured concrete with soft gradients, subtle texture, and five refined neutrals.\"",
       },
       heroImageUrl: {
         type: "string",

@@ -124,7 +124,7 @@ export function ScrapePreviewClient({
           </p>
         )}
       </div>
-      <Brochure data={liveData} />
+      <Brochure data={liveData} factoryName={meta.factoryName} />
     </>
   );
 }

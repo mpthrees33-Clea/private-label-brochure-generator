@@ -11,7 +11,7 @@ export const KENDALL_SAMPLE: BrochureData = {
   trinityName: "kendall",
   trinityTagline: "thru color porcelain tile, made in usa",
   description:
-    "Industrial inspiration meets modern sophistication. Kendall captures the raw elegance of poured concrete with soft gradients, subtle texture, and five refined neutrals—delivering minimalist beauty and elevated design in versatile formats including 12x24 field and deco, 6x24 plank, mosaic, and bullnose.",
+    "Industrial inspiration meets modern sophistication. {{name}} captures the raw elegance of poured concrete with soft gradients, subtle texture, and five refined neutrals—delivering minimalist beauty and elevated design in versatile formats including 12x24 field and deco, 6x24 plank, mosaic, and bullnose.",
   heroImageUrl: "/sample/kendall-hero.jpg",
   colors: [
     {
@@ -73,7 +73,7 @@ export const LUNETT_SAMPLE: BrochureData = {
   trinityName: "lunett",
   trinityTagline: "thru color rectified porcelain tile, made in usa",
   description:
-    "Lunett is a refined porcelain collection inspired by the quiet elegance of moonlight and the natural beauty of stone. Featuring five soft colors and multiple sizes, it blends Ceppo di Gré, Fior di Bosco, and Moonstone into a calm, sophisticated palette—enhanced by built-in antimicrobial technology.",
+    "{{name}} is a refined porcelain collection inspired by the quiet elegance of moonlight and the natural beauty of stone. Featuring five soft colors and multiple sizes, it blends Ceppo di Gré, Fior di Bosco, and Moonstone into a calm, sophisticated palette—enhanced by built-in antimicrobial technology.",
   heroImageUrl: "",
   colors: [
     { trinityName: "white", imageUrl: "" },
@@ -116,7 +116,7 @@ export const OBERLIN_SAMPLE: BrochureData = {
   trinityName: "oberlin",
   trinityTagline: "rectified porcelain tile + ceramic wall tile, made in italy",
   description:
-    "Oberlin captures the quiet beauty of natural oak in a durable porcelain surface. Developed with seasoned wood experts, it begins with carefully selected oak references, reimagined through advanced ceramic technology to preserve every grain, knot, and nuance—offering warmth, authenticity, and a deep connection to nature.",
+    "{{name}} captures the quiet beauty of natural oak in a durable porcelain surface. Developed with seasoned wood experts, it begins with carefully selected oak references, reimagined through advanced ceramic technology to preserve every grain, knot, and nuance—offering warmth, authenticity, and a deep connection to nature.",
   heroImageUrl: "",
   colors: [
     { trinityName: "bright", imageUrl: "" },
@@ -170,7 +170,7 @@ export const TORRANCE_SAMPLE: BrochureData = {
   trinityName: "torrance",
   trinityTagline: "thru color rectified porcelain tile, made in usa",
   description:
-    "Torrance captures the essence of timeworn stone with a modern edge, blending intricate veining and tonal depth across four versatile neutrals. With soft, brushed surfaces and structured textures, this porcelain collection brings understated elegance and lasting performance.",
+    "{{name}} captures the essence of timeworn stone with a modern edge, blending intricate veining and tonal depth across four versatile neutrals. With soft, brushed surfaces and structured textures, this porcelain collection brings understated elegance and lasting performance.",
   heroImageUrl: "",
   colors: [
     { trinityName: "bianco", imageUrl: "", decoImageUrl: "" },

@@ -9,7 +9,8 @@ Rules to never violate:
 - trinityName is always a single lowercase word, never the factory's product name.
 - All names (trinityName, color trinityNames) are lowercase.
 - techSpecs values keep their printed units exactly ("≤ 0.5%", "≥ 450 lbf").
-- Do not invent technical specs the rep didn't provide.`;
+- Do not invent technical specs the rep didn't provide.
+- description ALWAYS uses the literal token "{{name}}" (with curly braces) wherever the product name appears — never bake the current Trinity name into the saved string. If the description you receive has the current name written out, replace those occurrences with {{name}} before returning. This keeps the body and header in sync forever.`;
 
 const APPLY_EDIT_TOOL = {
   name: "apply_edit",

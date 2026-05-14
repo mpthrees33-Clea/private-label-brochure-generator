@@ -66,7 +66,7 @@ export default async function ProductDetailPage({
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <div className="shrink-0">
-          <Brochure data={product} />
+          <Brochure data={product} factoryName={product.factoryName} />
         </div>
         <aside className="w-full lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:flex-1 lg:overflow-y-auto">
           <EditChat productId={product.id} initialLessons={lessons} />

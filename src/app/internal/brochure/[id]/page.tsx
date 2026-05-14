@@ -33,7 +33,7 @@ export default async function SavedBrochurePage({
           Download PDF
         </Link>
       </div>
-      <Brochure data={product} />
+      <Brochure data={product} factoryName={product.factoryName} />
     </>
   );
 }
