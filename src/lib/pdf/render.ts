@@ -10,8 +10,9 @@ import { PDFDocument } from "pdf-lib";
 const CHROMIUM_PACK_URL =
   "https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar";
 
-chromium.setHeadlessMode = true;
-chromium.setGraphicsMode = false;
+// Setters exist at runtime but aren't in chromium-min's types.
+(chromium as unknown as { setHeadlessMode: boolean }).setHeadlessMode = true;
+(chromium as unknown as { setGraphicsMode: boolean }).setGraphicsMode = false;
 
 // Render a brochure page (e.g. /internal/brochure/<id>) to a Letter-size
 // PDF buffer. Asserts page count === 2 — brochures must never silently
