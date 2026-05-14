@@ -8,15 +8,15 @@ export const CONTENT_W = PAGE_W - 2 * PAGE_PADDING_X; // 720
 
 // Fixed page-2 vertical elements, in px. Conservative estimates — better
 // to leave a small unused gap than to overflow onto page 3.
-const HEADER_H = 96;           // pt-[20px] + h1 56*0.95 + mt-1 + tagline ~ 90, +6 cushion
+const HEADER_H = 100;          // pt-[20px] + h1 56*0.95 + mt-1 + tagline ~ 96, +4 cushion
 const BODY_TOP_GAP = 12;       // mt-3
 const SECTION_GAP = 6;         // space-y-1.5
-const MATRIX_HEADER_H = 50;    // sizes h3 + size-icon header row
-const MATRIX_ROW_H = 16;       // one color row
+const MATRIX_HEADER_H = 68;    // sizes h3 (~18) + size-icon header row with thickness (~50)
+const MATRIX_ROW_H = 22;       // py-1 (8) + text 10 + border-b 1 + cushion
 const FOOTNOTES_MAX_H = 16;
-const BOTTOM_ROW_H = 92;       // tech specs h3 + table OR contact block (whichever taller)
+const BOTTOM_ROW_H = 102;      // tech specs h3 + header band + standard row + data row ~96
 const BOTTOM_PADDING = 28;     // pb-[28px]
-const SAFETY_BUFFER = 12;      // round-up cushion vs print-time subpixel layout
+const SAFETY_BUFFER = 20;      // round-up cushion vs print-time subpixel layout
 
 const SWATCH_LABEL_H = 18;     // mt-1 (4) + text-[11px] line (14)
 const SWATCH_ROW_GAP = 8;      // mt-2 between deco rows

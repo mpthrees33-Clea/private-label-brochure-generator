@@ -93,7 +93,7 @@ function Page2({ data }: { data: BrochureData }) {
         <div className="flex-1 min-w-0">
           <TechSpecsTable specs={data.techSpecs} />
         </div>
-        <ContactBlock qrTarget="https://www.trinitysurfaces.com" />
+        <ContactBlock />
       </div>
     </section>
   );
