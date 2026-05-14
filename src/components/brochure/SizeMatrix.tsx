@@ -45,12 +45,12 @@ export function SizeMatrix({
               const avail = availability[c.trinityName] ?? [];
               return (
                 <tr key={c.trinityName} className="border-b border-[#e0e0e0]">
-                  <td className="py-2 text-left">{c.trinityName}</td>
+                  <td className="py-1.5 text-left">{c.trinityName}</td>
                   {sizes.map((s) => {
                     const key = s.label + (s.isDeco ? " deco" : "");
                     const hit = avail.includes(key) || avail.includes(s.label);
                     return (
-                      <td key={s.label} className="py-2 text-center">
+                      <td key={s.label} className="py-1.5 text-center">
                         {hit ? (
                           <span className="inline-block h-2 w-2 rounded-full bg-[#1a1a1a]" />
                         ) : null}

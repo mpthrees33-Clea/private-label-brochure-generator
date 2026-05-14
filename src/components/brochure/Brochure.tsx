@@ -61,7 +61,7 @@ function Page2({ data }: { data: BrochureData }) {
         productName={data.trinityName}
         tagline={data.trinityTagline}
       />
-      <div className="mt-6 space-y-5">
+      <div className="mt-4 space-y-3">
         <ColorSwatchGrid colors={data.colors} />
         <SizeMatrix
           sizes={data.sizes}
@@ -87,7 +87,7 @@ function Page2({ data }: { data: BrochureData }) {
         )}
         <TechSpecsTable specs={data.techSpecs} />
       </div>
-      <div className="mt-auto mb-[48px]">
+      <div className="mt-auto mb-[36px]">
         <ContactBlock qrTarget="https://www.trinitysurfaces.com" />
       </div>
     </section>
