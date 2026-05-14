@@ -1,63 +1,57 @@
 import type { BrochureColor } from "@/lib/brochure-types";
 
-// Fixed swatch height so page 2 fits on a single 1056px (Letter) sheet
-// alongside the size matrix, finish legend, tech specs, and contact block.
-// See feedback_brochure_two_pages memory: brochures MUST be exactly 2 pages.
-const SWATCH_H = 175;
+// Tile swatches mimic a 12"x24" tile — aspect ratio MUST be 1:2.
+// Never alter the ratio. If page 2 overflows, scale w AND h together
+// or compress non-swatch sections. See feedback_swatch_aspect_ratio.
+const SWATCH_W = 100; // → height = 200 via aspect-[1/2]
+const SWATCH_GAP = 14;
 
 export function ColorSwatchGrid({ colors }: { colors: BrochureColor[] }) {
   const hasDeco = colors.some((c) => c.decoImageUrl);
-  const cols = colors.length;
-  const gridStyle = { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` };
-
   return (
     <div className="px-[48px]">
-      <div className="grid gap-x-3 gap-y-1" style={gridStyle}>
-        {colors.map((c) => (
-          <div key={c.trinityName} className="flex flex-col">
+      <SwatchRow colors={colors} key="standard" />
+      {hasDeco && <SwatchRow colors={colors} deco key="deco" />}
+    </div>
+  );
+}
+
+function SwatchRow({
+  colors,
+  deco = false,
+}: {
+  colors: BrochureColor[];
+  deco?: boolean;
+}) {
+  return (
+    <div
+      className={deco ? "mt-2 flex" : "flex"}
+      style={{ gap: `${SWATCH_GAP}px` }}
+    >
+      {colors.map((c) => {
+        const src = deco ? c.decoImageUrl ?? undefined : c.imageUrl;
+        const label = deco ? `${c.trinityName} deco` : c.trinityName;
+        return (
+          <div key={c.trinityName + (deco ? "-deco" : "")} className="flex flex-col">
             <div
-              className="w-full overflow-hidden bg-[#f3f3f3]"
-              style={{ height: SWATCH_H }}
+              className="aspect-[1/2] overflow-hidden bg-[#f3f3f3]"
+              style={{ width: SWATCH_W }}
             >
-              {c.imageUrl ? (
+              {src ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={c.imageUrl}
-                  alt={c.trinityName}
+                  src={src}
+                  alt={label}
                   className="h-full w-full object-cover"
                 />
               ) : null}
             </div>
             <span className="mt-1 text-[11px] lowercase text-[#3a3a3a]">
-              {c.trinityName}
+              {label}
             </span>
           </div>
-        ))}
-      </div>
-      {hasDeco && (
-        <div className="mt-2 grid gap-x-3 gap-y-1" style={gridStyle}>
-          {colors.map((c) => (
-            <div key={c.trinityName + "-deco"} className="flex flex-col">
-              <div
-                className="w-full overflow-hidden bg-[#f3f3f3]"
-                style={{ height: SWATCH_H }}
-              >
-                {c.decoImageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={c.decoImageUrl}
-                    alt={`${c.trinityName} deco`}
-                    className="h-full w-full object-cover"
-                  />
-                ) : null}
-              </div>
-              <span className="mt-1 text-[11px] lowercase text-[#3a3a3a]">
-                {c.trinityName} deco
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }
