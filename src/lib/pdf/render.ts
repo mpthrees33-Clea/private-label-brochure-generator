@@ -1,10 +1,15 @@
 import puppeteer, { type Browser } from "puppeteer-core";
-import chromium from "@sparticuz/chromium";
+import chromium from "@sparticuz/chromium-min";
 import { PDFDocument } from "pdf-lib";
 
-// Recommended @sparticuz/chromium tweaks for serverless: don't link GL
-// libraries we don't ship, and keep headless mode as the package
-// recommends (it returns "shell" on newer versions).
+// @sparticuz/chromium-min downloads the chromium binary + shared libs
+// from GitHub releases to /tmp at runtime. This avoids the libnss3
+// "shared object not found" error that the bundled @sparticuz/chromium
+// package hits on Vercel's newer Node runtimes (Amazon Linux 2023
+// strips libraries the binary needs).
+const CHROMIUM_PACK_URL =
+  "https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar";
+
 chromium.setHeadlessMode = true;
 chromium.setGraphicsMode = false;
 
@@ -57,10 +62,10 @@ export async function renderBrochurePdf(brochureUrl: string): Promise<Uint8Array
 }
 
 async function launchBrowser(): Promise<Browser> {
-  // On Vercel chromium ships in the function bundle via @sparticuz/chromium.
-  // Locally fall back to PUPPETEER_EXECUTABLE_PATH so a dev with Chrome can render.
+  // Local dev: use system Chrome if PUPPETEER_EXECUTABLE_PATH is set.
+  // Production: download chromium + libs from GitHub at request time.
   const local = process.env.PUPPETEER_EXECUTABLE_PATH;
-  const executablePath = local || (await chromium.executablePath());
+  const executablePath = local || (await chromium.executablePath(CHROMIUM_PACK_URL));
 
   return puppeteer.launch({
     args: chromium.args,
