@@ -27,7 +27,13 @@ body {
   body {
     background: #ffffff;
   }
+  .brochure-root {
+    gap: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
   .brochure-page {
+    box-shadow: none !important;
     page-break-after: always;
   }
   .brochure-page:last-child {
