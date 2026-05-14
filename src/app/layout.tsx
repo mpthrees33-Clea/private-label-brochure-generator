@@ -10,7 +10,7 @@ const montserrat = Montserrat({
 
 const brand = Montserrat({
   subsets: ["latin"],
-  weight: ["700", "800", "900"],
+  weight: ["400", "500", "600", "700"],
   variable: "--font-brand",
   display: "swap",
 });

@@ -30,10 +30,11 @@ const config: Config = {
         danger: "#ef4444",
         // brochure print colors — used only inside /internal/brochure renderer
         brochure: {
-          fg: "#1a1a1a",
-          muted: "#4a4a4a",
-          line: "#cccccc",
-          trinity: "#177AA9",
+          fg: "#585860", // Trinity gray, sampled from the logo
+          muted: "#7a7a82",
+          line: "#c4c4c8",
+          trinity: "#1078a8", // Trinity blue, sampled from the logo
+          gray: "#585860",
         },
       },
       fontFamily: {

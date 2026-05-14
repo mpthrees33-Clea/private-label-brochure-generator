@@ -16,34 +16,35 @@ export function TechSpecsTable({ specs }: { specs: Partial<TechSpecs> }) {
   // Hide columns with no value (e.g. Torrance drops scratch hardness)
   const cols = COLUMNS.filter((c) => specs[c.key]);
   return (
-    <div className="px-[48px]">
-      <h3 className="text-[14px] lowercase text-[#3a3a3a]">
+    <div>
+      <h3 className="text-[12px] lowercase text-brochure-gray">
         technical specifications
       </h3>
-      <table className="mt-2 w-full border-collapse text-[10px] lowercase">
+      <table className="mt-1 w-full border-collapse text-[9px] lowercase">
         <thead>
-          <tr className="bg-[#cfe1ec] text-[#3a3a3a]">
+          {/* Header band — Trinity gray with white text */}
+          <tr className="bg-brochure-gray text-white">
             {cols.map((c) => (
               <th
                 key={c.key}
-                className="px-2 py-1.5 text-left font-normal align-bottom"
+                className="px-1.5 py-1 text-left font-normal align-bottom leading-tight"
               >
                 {c.label}
               </th>
             ))}
           </tr>
-          <tr className="text-[#3a3a3a]">
+          <tr className="text-brochure-gray">
             {cols.map((c) => (
-              <td key={c.key} className="border-b border-[#e0e0e0] px-2 py-1">
+              <td key={c.key} className="border-b border-brochure-line px-1.5 py-1">
                 {c.standard}
               </td>
             ))}
           </tr>
         </thead>
         <tbody>
-          <tr className="text-[#1a1a1a]">
+          <tr className="text-brochure-gray">
             {cols.map((c) => (
-              <td key={c.key} className="px-2 py-1.5">
+              <td key={c.key} className="px-1.5 py-1">
                 {specs[c.key]}
               </td>
             ))}

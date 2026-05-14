@@ -69,7 +69,7 @@ function Page2({ data }: { data: BrochureData }) {
           availability={data.availability}
         />
         {(data.finishLegend.length > 0 || data.footnotes.length > 0) && (
-          <div className="flex justify-between px-[48px] text-[10px] lowercase text-[#5a5a5a]">
+          <div className="flex justify-between px-[48px] text-[10px] lowercase text-brochure-gray">
             <div>
               {data.footnotes.map((f) => (
                 <p key={f}>{f}</p>
@@ -78,16 +78,20 @@ function Page2({ data }: { data: BrochureData }) {
             <div className="flex items-center gap-3">
               {data.finishLegend.map((l) => (
                 <span key={l} className="flex items-center gap-1">
-                  <span className="inline-block h-2 w-2 rounded-full bg-[#1a1a1a]" />
+                  <span className="inline-block h-2 w-2 rounded-full bg-brochure-gray" />
                   {l}
                 </span>
               ))}
             </div>
           </div>
         )}
-        <TechSpecsTable specs={data.techSpecs} />
       </div>
-      <div className="mt-auto pb-[36px]">
+      {/* Bottom row: tech specs (left) + QR/contact (right) on the same line,
+          aligned to the bottom of the page. */}
+      <div className="mt-auto flex items-end justify-between gap-6 px-[48px] pb-[36px]">
+        <div className="flex-1 min-w-0">
+          <TechSpecsTable specs={data.techSpecs} />
+        </div>
         <ContactBlock qrTarget="https://www.trinitysurfaces.com" />
       </div>
     </section>

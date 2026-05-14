@@ -12,15 +12,15 @@ export function SizeMatrix({
 }) {
   return (
     <div className="px-[48px]">
-      <h3 className="text-[12px] lowercase text-[#3a3a3a]">sizes</h3>
-      <table className="mt-1 w-full border-collapse text-[10px] lowercase leading-tight text-[#3a3a3a]">
+      <h3 className="text-[12px] lowercase text-brochure-gray">sizes</h3>
+      <table className="mt-1 w-full border-collapse text-[10px] lowercase leading-tight text-brochure-gray">
         <thead>
           <tr>
             <th className="w-[18%]" />
             {sizes.map((s) => (
               <th
                 key={s.label}
-                className="border-b border-[#e0e0e0] px-1 pb-1.5 text-center align-bottom font-normal"
+                className="border-b border-brochure-line px-1 pb-1.5 text-center align-bottom font-normal"
               >
                 <div className="flex flex-col items-center gap-0.5">
                   <SizeIcon kind={s.iconKind} />
@@ -30,7 +30,7 @@ export function SizeMatrix({
                     {s.isDeco ? " deco" : ""}
                   </span>
                   {s.thickness && (
-                    <span className="text-[9px] text-[#6a6a6a]">
+                    <span className="text-[9px] text-brochure-muted">
                       {s.thickness}
                     </span>
                   )}
@@ -43,7 +43,7 @@ export function SizeMatrix({
           {colors.map((c) => {
             const avail = availability[c.trinityName] ?? [];
             return (
-              <tr key={c.trinityName} className="border-b border-[#e0e0e0]">
+              <tr key={c.trinityName} className="border-b border-brochure-line">
                 <td className="py-1 text-left">{c.trinityName}</td>
                 {sizes.map((s) => {
                   const key = s.label + (s.isDeco ? " deco" : "");
@@ -51,7 +51,7 @@ export function SizeMatrix({
                   return (
                     <td key={s.label} className="py-1 text-center">
                       {hit ? (
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#1a1a1a]" />
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-brochure-gray" />
                       ) : null}
                     </td>
                   );
