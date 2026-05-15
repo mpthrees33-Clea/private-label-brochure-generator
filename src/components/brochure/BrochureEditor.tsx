@@ -114,6 +114,24 @@ export function BrochureEditor({
     };
   }, [measureSelection]);
 
+  // Deselect when the rep taps outside the editor entirely — e.g. on the
+  // page header, the edit-chat sidebar, or the dashboard breadcrumb.
+  // Necessary so a rep on a phone can clear the selection (and re-enable
+  // page scrolling) without having to find an empty corner of the
+  // brochure itself.
+  useEffect(() => {
+    if (!selectedId) return;
+    const onDocPointerDown = (e: PointerEvent) => {
+      const root = rootRef.current;
+      if (!root) return;
+      const t = e.target as Node | null;
+      if (t && root.contains(t)) return;
+      setSelectedId(null);
+    };
+    document.addEventListener("pointerdown", onDocPointerDown);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown);
+  }, [selectedId]);
+
   const persistOverride = useCallback(
     async (id: BlockId, override: BlockPosition | null) => {
       setSaving(true);
@@ -147,6 +165,16 @@ export function BrochureEditor({
     const pageEl = blockEl.closest(".brochure-page") as HTMLElement | null;
     if (!pageEl) return;
 
+    // Two-tap drag on touch: the first tap only selects. A second tap
+    // on the SAME block starts the drag. This prevents the page from
+    // scrolling out from under the rep while they try to reposition a
+    // block on a phone. Mouse / pen drag in one motion as before.
+    const isTouch = e.pointerType === "touch";
+    const wasSelected = id === selectedId;
+    if (isTouch && !wasSelected) {
+      setSelectedId(id);
+      return;
+    }
     setSelectedId(id);
 
     const pageRect = pageEl.getBoundingClientRect();
@@ -165,6 +193,9 @@ export function BrochureEditor({
       active: false,
     };
     blockEl.setPointerCapture?.(e.pointerId);
+    // Once we've committed to a drag (second tap on touch, or any
+    // tap on desktop), preventDefault keeps the browser from scrolling.
+    if (e.cancelable) e.preventDefault();
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -218,11 +249,12 @@ export function BrochureEditor({
     <div
       ref={rootRef}
       className="relative select-none"
-      // touch-action: pan-y lets the page scroll vertically on mobile
-      // while still firing pointer events for our drag-to-position
-      // handler. Without this, dragging a block on a phone would scroll
-      // the page instead.
-      style={{ touchAction: "pan-y" }}
+      // While no block is selected, leave touch-action at pan-y so the
+      // rep can freely scroll the page on a phone. Once a block IS
+      // selected, switch to touch-action: none — the next tap is meant
+      // to drag, and we don't want the browser hijacking the gesture as
+      // a scroll. Tap-outside-the-editor deselects and restores scroll.
+      style={{ touchAction: selectedId ? "none" : "pan-y" }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -276,21 +308,30 @@ function SelectionOverlay({
             "0 0 0 2px #177AA9, 0 0 0 4px rgba(23,122,169,0.25)",
         }}
       />
-      {onReset && (
-        <button
-          data-editor-overlay
-          type="button"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={onReset}
-          className="absolute z-20 rounded-md bg-white px-2 py-1 text-[11px] font-medium text-accent shadow ring-1 ring-accent/40 transition hover:bg-accent hover:text-white"
-          style={{
-            left: rect.left,
-            top: Math.max(0, rect.top - 28),
-          }}
-        >
-          reset position
-        </button>
-      )}
+      <div
+        data-editor-overlay
+        className="absolute z-20 flex items-center gap-2"
+        style={{
+          left: rect.left,
+          top: Math.max(0, rect.top - 28),
+        }}
+      >
+        {onReset && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={onReset}
+            className="rounded-md bg-white px-2 py-1 text-[11px] font-medium text-accent shadow ring-1 ring-accent/40 transition hover:bg-accent hover:text-white"
+          >
+            reset position
+          </button>
+        )}
+        {/* Mobile-only hint. md+ users dragged this in one motion, no
+            need to tell them how it works. */}
+        <span className="rounded-md bg-accent/90 px-2 py-1 text-[11px] font-medium text-white shadow md:hidden">
+          tap again to drag · tap outside to scroll
+        </span>
+      </div>
     </>
   );
 }
