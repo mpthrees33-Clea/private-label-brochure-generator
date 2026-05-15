@@ -7,6 +7,7 @@ import {
   getSwatchLayout,
 } from "@/lib/brochure-layout";
 import { renderDescription } from "@/lib/brochure-description";
+import { proxyImageUrl } from "@/lib/image-proxy";
 import { TrinityHeader } from "./TrinityHeader";
 import { ColorSwatchGrid } from "./ColorSwatchGrid";
 import { SizeMatrix } from "./SizeMatrix";
@@ -57,7 +58,7 @@ function Page1({
           {data.heroImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={data.heroImageUrl}
+              src={proxyImageUrl(data.heroImageUrl)}
               alt={data.trinityName}
               className="h-full w-full object-cover"
             />

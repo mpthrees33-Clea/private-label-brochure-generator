@@ -1,4 +1,5 @@
 import type { BrochureColor } from "@/lib/brochure-types";
+import { proxyImageUrl } from "@/lib/image-proxy";
 
 // Tile swatches mimic a 12"x24" tile — aspect ratio MUST be 1:2.
 // Never alter the ratio. If horizontal space runs out, the layout
@@ -63,7 +64,7 @@ function SwatchRow({
               {src ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={src}
+                  src={proxyImageUrl(src)}
                   alt={label}
                   className="h-full w-full object-cover"
                 />

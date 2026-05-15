@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Image as ImageIcon, ChevronDown, ChevronRight } from "lucide-react";
 import type { BrochureColor } from "@/lib/brochure-types";
+import { proxyImageUrl } from "@/lib/image-proxy";
 
 // Paste-URL editor for swatch images. The factory scraper sometimes
 // misses lazy-loaded swatches (or returns URLs that 404). The rep can
@@ -146,7 +147,11 @@ function SwatchRow({
       <div className="h-10 w-5 shrink-0 overflow-hidden rounded-sm border border-divider bg-[#f3f3f3]">
         {hasCurrent ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={current} alt="" className="h-full w-full object-cover" />
+          <img
+            src={proxyImageUrl(current)}
+            alt=""
+            className="h-full w-full object-cover"
+          />
         ) : null}
       </div>
       <input
