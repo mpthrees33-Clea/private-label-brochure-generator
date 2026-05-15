@@ -4,6 +4,7 @@ import { getProduct } from "@/lib/store/products";
 import { listLessonsForProduct } from "@/lib/store/lessons";
 import { missingBrochureFields } from "@/lib/brochure-quality";
 import { BrochureEditor } from "@/components/brochure/BrochureEditor";
+import { MobileFit } from "@/components/brochure/MobileFit";
 import { Download, FileEdit } from "lucide-react";
 import { DeleteProductButton } from "./DeleteProductButton";
 import { EditChat } from "./EditChat";
@@ -94,12 +95,14 @@ export default async function ProductDetailPage({
       <SwatchImageEditor productId={product.id} colors={product.colors} />
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="brochure-stage shrink-0">
-          <BrochureEditor
-            productId={product.id}
-            data={product}
-            factoryName={product.factoryName}
-          />
+        <div className="w-full min-w-0 lg:w-auto lg:shrink-0">
+          <MobileFit>
+            <BrochureEditor
+              productId={product.id}
+              data={product}
+              factoryName={product.factoryName}
+            />
+          </MobileFit>
           <p className="mt-2 hidden text-[11px] text-fg-muted md:block">
             click any block to select · drag to reposition · snaps to page
             center &amp; margins · &ldquo;reset position&rdquo; restores the default

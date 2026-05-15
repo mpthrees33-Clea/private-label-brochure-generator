@@ -20,17 +20,6 @@ body {
   color: #1a1a1a;
 }
 
-/* Mobile fit-to-viewport. The brochure is rendered at its native
-   816×1056 letter size; on phones we use CSS `zoom` to scale the
-   entire stage down to fit the viewport width minus a small gutter.
-   `zoom` keeps getBoundingClientRect in scaled coordinates so the
-   drag-editor's scale math still works. */
-@media (max-width: 767px) {
-  .brochure-stage {
-    zoom: calc((100vw - 24px) / 816);
-  }
-}
-
 @page {
   size: letter;
   margin: 0;
