@@ -47,9 +47,13 @@ function tmpPathFor(pathname: string): string {
 
 async function readPrivateBlob(pathname: string): Promise<unknown | null> {
   // `get` requires the exact pathname; we don't need to list first.
-  // On a missing blob it throws BlobNotFoundError, which we catch.
+  // useCache:false bypasses Vercel's CDN — critical for read-after-write
+  // correctness. With caching on, a freshly written products.json can
+  // still serve stale "not found" responses from the CDN edge, producing
+  // the "saved but not visible on read" 404 cycle.
+  // On a missing blob `get` throws BlobNotFoundError, which we catch.
   try {
-    const result = await get(pathname, { access: ACCESS });
+    const result = await get(pathname, { access: ACCESS, useCache: false });
     if (!result || result.statusCode !== 200 || !result.stream) return null;
     const reader = result.stream.getReader();
     const chunks: Uint8Array[] = [];
