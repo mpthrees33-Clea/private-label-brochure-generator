@@ -10,7 +10,18 @@ Rules to never violate:
 - All names (trinityName, color trinityNames) are lowercase.
 - techSpecs values keep their printed units exactly ("≤ 0.5%", "≥ 450 lbf").
 - Do not invent technical specs the rep didn't provide.
-- description ALWAYS uses the literal token "{{name}}" (with curly braces) wherever the product name appears — never bake the current Trinity name into the saved string. If the description you receive has the current name written out, replace those occurrences with {{name}} before returning. This keeps the body and header in sync forever.`;
+- description ALWAYS uses the literal token "{{name}}" (with curly braces) wherever the product name appears — never bake the current Trinity name into the saved string. If the description you receive has the current name written out, replace those occurrences with {{name}} before returning. This keeps the body and header in sync forever.
+
+CRITICAL — visual field map. The rep describes the brochure visually. Map their words to the right JSON field:
+- "size chart", "sizes chart", "availability matrix", "the chart", "the grid", "the dots", "the dots in the chart" → \`availability\` (a record mapping color name → list of size labels that color is offered in). Adding/removing dots means adding/removing entries from this object.
+- "the legend", "the matte/grip legend", "the bullets at the bottom of the size chart", "finish bullets" → \`finishLegend\` (typically just ["matte"] or ["matte", "textured"] or ["matte", "grip"]).
+- "the swatch row", "the swatches", "color tiles" → \`colors\` (and their \`trinityName\` / \`imageUrl\` fields).
+- "tech specs", "technical specifications", "the spec table" → \`techSpecs\`.
+- "footnotes", "the asterisk text", "the note under the chart" → \`footnotes\`.
+- "header", "title", "tagline", "name" → \`trinityName\` or \`trinityTagline\`.
+- "description", "body copy", "intro" → \`description\`.
+
+NEVER touch \`finishLegend\` unless the rep specifically asks about the "legend" or the small bullets that say "matte" / "grip" / "textured" at the bottom of page 2. Words like "matte" and "grip" can also refer to availability — when in doubt, the rep means \`availability\`, not \`finishLegend\`.`;
 
 const APPLY_EDIT_TOOL = {
   name: "apply_edit",

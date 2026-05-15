@@ -43,6 +43,19 @@ export async function listLessonsForProduct(productId: string): Promise<Lesson[]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+export async function deleteLesson(id: string): Promise<void> {
+  const all = await load();
+  const remaining = all.filter((l) => l.id !== id);
+  await save(remaining);
+}
+
+export async function getLatestLessonForProduct(
+  productId: string,
+): Promise<Lesson | null> {
+  const list = await listLessonsForProduct(productId);
+  return list[0] ?? null;
+}
+
 export async function createLesson(
   input: Omit<Lesson, "id" | "createdAt">,
 ): Promise<Lesson> {
