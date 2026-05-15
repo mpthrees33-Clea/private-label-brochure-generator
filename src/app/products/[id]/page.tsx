@@ -9,6 +9,7 @@ import { DeleteProductButton } from "./DeleteProductButton";
 import { EditChat } from "./EditChat";
 import { NameEditor } from "./NameEditor";
 import { MissingFieldsPanel } from "./MissingFieldsPanel";
+import { SwatchImageEditor } from "./SwatchImageEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +91,7 @@ export default async function ProductDetailPage({
       </header>
 
       <MissingFieldsPanel productId={product.id} missing={missing} />
+      <SwatchImageEditor productId={product.id} colors={product.colors} />
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <div className="shrink-0">

@@ -59,14 +59,19 @@ export async function fetchAndCleanPage(url: string): Promise<FetchedPage> {
   $("[hidden], [aria-hidden=true]").remove();
 
   // Resolve relative image and link URLs against the base URL so Claude
-  // can return absolute image URLs.
+  // can return absolute image URLs. Also pull from srcset / data-srcset
+  // which many lazy-loading frameworks (WordPress, Shopify, Yoast) use
+  // instead of src.
   $("img").each((_, el) => {
     const $img = $(el);
     const src =
       $img.attr("src") ||
       $img.attr("data-src") ||
       $img.attr("data-lazy-src") ||
-      $img.attr("data-original");
+      $img.attr("data-original") ||
+      firstUrlFromSrcset($img.attr("srcset")) ||
+      firstUrlFromSrcset($img.attr("data-srcset")) ||
+      firstUrlFromSrcset($img.attr("data-lazy-srcset"));
     const alt = $img.attr("alt") || "";
     if (!src) {
       $img.remove();
@@ -94,4 +99,17 @@ export async function fetchAndCleanPage(url: string): Promise<FetchedPage> {
   const title = $("title").text().trim();
   const body = ($("body").html() || "").replace(/\s+/g, " ").trim();
   return { url, cleanedHtml: body, title, anchors };
+}
+
+function firstUrlFromSrcset(srcset: string | undefined): string | undefined {
+  if (!srcset) return undefined;
+  // srcset format: "url1 1x, url2 2x" or "url1 100w, url2 200w".
+  // Take the LARGEST candidate (last entry) so we get the highest-res
+  // image — swatches benefit from sharpness when downscaled by the
+  // brochure renderer.
+  const candidates = srcset
+    .split(",")
+    .map((s) => s.trim().split(/\s+/)[0])
+    .filter(Boolean);
+  return candidates[candidates.length - 1];
 }
