@@ -75,19 +75,42 @@ export async function renderBrochurePdf(brochureUrl: string): Promise<Uint8Array
     // open so networkidle0 would never fire. We manually wait for all images
     // to finish loading below, which is the actual signal we care about.
     await page.goto(brochureUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.evaluate(async () => {
+    // Wait for every image to load OR error OR hit a per-image timeout.
+    // A hanging factory image (slow CDN, dead URL) used to keep this
+    // promise pending until the Vercel function killed the request,
+    // which surfaced as a grey screen in the browser. Now each image
+    // gets at most 5 seconds; after that we render whatever's there.
+    await page.evaluate(async (perImageTimeoutMs: number) => {
       const imgs = Array.from(document.images);
       await Promise.all(
-        imgs.map((img) =>
-          img.complete && img.naturalHeight !== 0
-            ? Promise.resolve()
-            : new Promise<void>((resolve) => {
-                img.addEventListener("load", () => resolve(), { once: true });
-                img.addEventListener("error", () => resolve(), { once: true });
-              }),
+        imgs.map(
+          (img) =>
+            new Promise<void>((resolve) => {
+              if (img.complete && img.naturalHeight !== 0) {
+                resolve();
+                return;
+              }
+              const timer = setTimeout(() => resolve(), perImageTimeoutMs);
+              img.addEventListener(
+                "load",
+                () => {
+                  clearTimeout(timer);
+                  resolve();
+                },
+                { once: true },
+              );
+              img.addEventListener(
+                "error",
+                () => {
+                  clearTimeout(timer);
+                  resolve();
+                },
+                { once: true },
+              );
+            }),
         ),
       );
-    });
+    }, 5000);
 
     const pdfBytes = await page.pdf({
       format: "Letter",

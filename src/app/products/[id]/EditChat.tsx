@@ -38,8 +38,15 @@ export function EditChat({
       });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
+
+      // No-op edit: show the explanation, don't clear the textarea or
+      // save a "lesson" — the rep can rephrase and try again.
+      if (json?.noop) {
+        setError(json.changeSummary || "No changes were applied.");
+        return;
+      }
+
       setInstruction("");
-      // Optimistically prepend the new lesson; the refresh will reconcile.
       if (json?.changeSummary) {
         setLessons((prev) => [
           {

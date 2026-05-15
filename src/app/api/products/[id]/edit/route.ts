@@ -49,6 +49,23 @@ export async function POST(
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 
+  // Detect no-op edits. If the AI returned identical data (typically
+  // because the instruction was a layout / visual request that can't
+  // be applied via BrochureData), don't save a misleading "rule" to
+  // the lessons store and tell the rep what happened.
+  const noopChange = isStructurallyEqual(before, result.data);
+  if (noopChange) {
+    return NextResponse.json(
+      {
+        product,
+        noop: true,
+        changeSummary:
+          "No data changes applied. The chat edits brochure DATA (description, names, colors, sizes, tech specs) — not visual layout. Layout/positioning of swatches, headers, etc. is fixed by the renderer. Try rephrasing as a data change, or ask the engineer to adjust the template.",
+      },
+      { status: 200 },
+    );
+  }
+
   const updated = await updateProduct(params.id, result.data);
 
   await createLesson({
@@ -65,4 +82,14 @@ export async function POST(
     product: updated,
     changeSummary: result.changeSummary,
   });
+}
+
+function isStructurallyEqual(a: unknown, b: unknown): boolean {
+  // Cheap deep-equality via canonical JSON. BrochureData is tree-
+  // shaped and serializable, no Date/Map/Set fields to worry about.
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
 }

@@ -58,6 +58,25 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("PDF render failed:", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Browsers requesting application/pdf can't render JSON errors —
+    // they show a blank/grey tab. Return an HTML error page so the rep
+    // actually sees what failed and can go back / retry.
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>PDF generation failed</title><style>body{font:14px/1.5 system-ui,sans-serif;background:#0a0e14;color:#f5f9ff;padding:48px;max-width:640px;margin:0 auto}h1{color:#ff6b6b;font-size:18px;margin:0 0 8px}pre{background:#161e2a;border:1px solid #222e3f;border-radius:6px;padding:12px;font-size:12px;white-space:pre-wrap;word-break:break-word;color:#cfd8e6}a{color:#177AA9;text-decoration:none}a:hover{text-decoration:underline}.actions{margin-top:24px;display:flex;gap:12px}</style></head><body><h1>PDF generation failed</h1><p style="color:#9ba6b3">The brochure renderer hit an error. The product is still saved — only the PDF export failed.</p><pre>${escapeHtml(message)}</pre><div class="actions"><a href="javascript:history.back()">← Back</a><a href="${escapeAttr(req.headers.get("referer") ?? "/")}">Return to brochure</a></div></body></html>`;
+    return new NextResponse(html, {
+      status: 500,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
   }
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+function escapeAttr(s: string): string {
+  return escapeHtml(s);
 }
