@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { renderBrochurePdf } from "@/lib/pdf/render";
+import { getProduct } from "@/lib/store/products";
+import {
+  missingBrochureFields,
+  MISSING_FIELD_LABELS,
+} from "@/lib/brochure-quality";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -32,9 +37,25 @@ export async function GET(req: NextRequest) {
       filename = "brochure.pdf";
     }
   } else {
-    // Treat any other source as a saved product id.
+    // Treat any other source as a saved product id. Enforce the
+    // quality gate here too so a direct URL hit can't bypass the
+    // disabled Download button.
+    const product = await getProduct(source);
+    if (!product) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+    const missing = missingBrochureFields(product);
+    if (missing.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Cannot generate PDF — brochure is missing required fields: ${missing.map((m) => MISSING_FIELD_LABELS[m]).join(", ")}`,
+          missingFields: missing,
+        },
+        { status: 422 },
+      );
+    }
     renderPath = `/internal/brochure/${encodeURIComponent(source)}`;
-    filename = `${source}.pdf`;
+    filename = `${product.trinityName || source}.pdf`;
   }
 
   const host = req.headers.get("host") ?? "localhost:3000";

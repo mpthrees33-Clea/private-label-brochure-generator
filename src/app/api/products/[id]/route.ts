@@ -23,8 +23,25 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const patch = await req.json();
+  const body = await req.json();
+  const { mergeTechSpecs, ...patch } = body ?? {};
   try {
+    // If the client asks to merge tech specs (spec-sheet URL backfill),
+    // fold incoming values into the existing object instead of
+    // replacing wholesale.
+    if (mergeTechSpecs && patch.techSpecs && typeof patch.techSpecs === "object") {
+      const existing = await getProduct(params.id);
+      if (!existing) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      const merged = { ...existing.techSpecs };
+      for (const [k, v] of Object.entries(patch.techSpecs)) {
+        if (v != null && v !== "") {
+          (merged as Record<string, string>)[k] = v as string;
+        }
+      }
+      patch.techSpecs = merged;
+    }
     const product = await updateProduct(params.id, patch);
     return NextResponse.json({ product });
   } catch (err) {

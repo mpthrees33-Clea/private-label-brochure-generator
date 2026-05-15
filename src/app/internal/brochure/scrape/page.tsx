@@ -1,12 +1,16 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { scrapeProduct } from "@/lib/scrapers";
 import { scrapedToBrochure } from "@/lib/scraped-to-brochure";
-import { findByFactoryUrl } from "@/lib/store/products";
-import { ScrapePreviewClient } from "./ScrapePreviewClient";
+import { createProduct, findByFactoryUrl } from "@/lib/store/products";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+// Scrape → auto-create product → redirect to /products/[id]. No
+// intermediate "save & open" step — the rep lands on the single
+// editing page where all changes (rename, edits, spec backfill,
+// download) happen in one place.
 export default async function ScrapeRenderPage({
   searchParams,
 }: {
@@ -25,50 +29,15 @@ export default async function ScrapeRenderPage({
     );
   }
 
-  // Dedupe BEFORE scraping. The crossover is the source of truth — a
-  // factory product can only be private-labeled once. See feedback
-  // memory `brochure-crossover-dedupe`.
+  // Dedupe — factoryUrl can only be private-labeled once.
   const existing = await findByFactoryUrl(url);
   if (existing) {
-    return (
-      <main className="mx-auto max-w-xl px-6 py-16 text-fg">
-        <h1 className="font-brand text-2xl font-extrabold tracking-tight">
-          already private-labeled
-        </h1>
-        <p className="mt-3 text-sm text-fg-muted">
-          This factory page is already in the crossover as{" "}
-          <span className="font-semibold lowercase text-fg">
-            {existing.trinityName}
-          </span>{" "}
-          ({existing.factory} → {existing.factoryName}).
-        </p>
-        <div className="mt-6 flex flex-wrap gap-2">
-          <Link
-            href={`/products/${existing.id}`}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white shadow-glow-accent transition hover:bg-accent-light"
-          >
-            Open {existing.trinityName}
-          </Link>
-          <Link
-            href="/internal/scrape"
-            className="rounded-md border border-divider bg-surface px-4 py-2 text-sm font-medium text-fg transition hover:border-accent"
-          >
-            ← Scrape a different URL
-          </Link>
-        </div>
-        <p className="mt-8 text-xs text-fg-faint">
-          To private-label this factory product under a different name, delete
-          the existing record first.
-        </p>
-      </main>
-    );
+    redirect(`/products/${existing.id}`);
   }
 
-  let data;
   let scraped;
   try {
     scraped = await scrapeProduct(url);
-    data = scrapedToBrochure(scraped);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return (
@@ -86,15 +55,20 @@ export default async function ScrapeRenderPage({
     );
   }
 
-  return (
-    <ScrapePreviewClient
-      initial={data}
-      meta={{
-        factory: scraped.factory,
-        factoryName: scraped.factoryName,
-        factoryUrl: scraped.factoryUrl,
-        aiSuggestedTrinityName: scraped.suggestedTrinityName,
-      }}
-    />
-  );
+  const data = scrapedToBrochure(scraped);
+  // Fallback Trinity name if AI didn't suggest one — keeps the product
+  // creatable; the rep is forced to rename it on the next page before
+  // the Download button enables. (`""` would fail the quality gate.)
+  if (!data.trinityName || data.trinityName.trim() === "") {
+    data.trinityName = "rename-me";
+  }
+
+  const created = await createProduct({
+    ...data,
+    factory: scraped.factory,
+    factoryName: scraped.factoryName,
+    factoryUrl: scraped.factoryUrl,
+  });
+
+  redirect(`/products/${created.id}`);
 }
