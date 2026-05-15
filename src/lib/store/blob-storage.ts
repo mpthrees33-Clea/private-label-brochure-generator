@@ -50,13 +50,12 @@ export async function readJsonStore<T>(
   fallback: T,
 ): Promise<T> {
   const s = getStorageStatus();
+  // Reads always fail-soft. Returning the fallback lets builds
+  // statically render any happen-to-touch-storage pages without
+  // exploding the deploy, and on the live site the StorageBanner
+  // already makes the misconfigured state visible to the rep.
   if (s.productionMissingToken) {
-    // Don't read from /tmp in prod-without-token. Reading is fine —
-    // we don't want to leak whatever orphaned data exists on whichever
-    // instance happens to handle this request.
-    throw new Error(
-      "Storage not configured: BLOB_READ_WRITE_TOKEN missing in production.",
-    );
+    return fallback;
   }
   if (s.mode === "blob") {
     try {
@@ -68,7 +67,7 @@ export async function readJsonStore<T>(
       return (await res.json()) as T;
     } catch (err) {
       console.error(`[blob-storage] read failed for ${pathname}:`, err);
-      throw err;
+      return fallback;
     }
   }
   try {

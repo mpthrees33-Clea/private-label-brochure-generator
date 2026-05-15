@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { listProducts } from "@/lib/store/products";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // GET /api/crossover/xlsx → XLSX matching the original example schema:
 // factory · factory name · factory color · Trinity name · Trinity color · factory link

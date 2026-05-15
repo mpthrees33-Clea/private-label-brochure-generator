@@ -6,6 +6,7 @@ import type { BrochureData } from "@/lib/brochure-types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 // POST /api/products/[id]/edit { instruction } → apply a plain-English
 // edit to the brochure and persist a Lesson for future scrapes.

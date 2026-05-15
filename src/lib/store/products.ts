@@ -14,19 +14,22 @@ async function load(): Promise<Product[]> {
   const products = await readJsonStore<Product[] | null>(PATHNAME, null);
   if (products && products.length > 0) {
     // Top-up: add any newly-introduced seed products that aren't yet
-    // persisted. Existing rep-edited rows are preserved.
+    // persisted. Existing rep-edited rows are preserved. Persistence
+    // is best-effort — if storage isn't configured we still return the
+    // merged list so the dashboard isn't broken, the writeJsonStore
+    // failure is what surfaces the misconfiguration on actual saves.
     const existingIds = new Set(products.map((p) => p.id));
     const missingSeeds = SEED_PRODUCTS.filter((p) => !existingIds.has(p.id));
     if (missingSeeds.length > 0) {
       const merged = [...products, ...missingSeeds];
-      await writeJsonStore(PATHNAME, merged);
+      writeJsonStore(PATHNAME, merged).catch(() => {});
       return merged;
     }
     return products;
   }
-  // First run — seed.
+  // First run — seed. Persist best-effort.
   const seeded = [...SEED_PRODUCTS];
-  await writeJsonStore(PATHNAME, seeded);
+  writeJsonStore(PATHNAME, seeded).catch(() => {});
   return seeded;
 }
 
