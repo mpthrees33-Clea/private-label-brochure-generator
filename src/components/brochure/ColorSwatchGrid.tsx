@@ -22,7 +22,7 @@ export function ColorSwatchGrid({
     chunks.push(colors.slice(i, i + perRow));
   }
   return (
-    <div className="px-[48px]" style={{ display: "flex", flexDirection: "column", gap: `${ROW_GAP}px` }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: `${ROW_GAP}px` }}>
       {chunks.map((row, idx) => (
         <div key={idx}>
           <SwatchRow colors={row} swatchWidth={swatchWidth} />

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getProduct } from "@/lib/store/products";
 import { listLessonsForProduct } from "@/lib/store/lessons";
 import { missingBrochureFields } from "@/lib/brochure-quality";
-import { Brochure } from "@/components/brochure/Brochure";
+import { BrochureEditor } from "@/components/brochure/BrochureEditor";
 import { Download, FileEdit } from "lucide-react";
 import { DeleteProductButton } from "./DeleteProductButton";
 import { EditChat } from "./EditChat";
@@ -94,8 +94,16 @@ export default async function ProductDetailPage({
       <SwatchImageEditor productId={product.id} colors={product.colors} />
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="shrink-0">
-          <Brochure data={product} factoryName={product.factoryName} />
+        <div className="brochure-stage shrink-0">
+          <BrochureEditor
+            productId={product.id}
+            data={product}
+            factoryName={product.factoryName}
+          />
+          <p className="mt-2 hidden text-[11px] text-fg-muted md:block">
+            click any block to select · drag to reposition · snaps to page
+            center &amp; margins · &ldquo;reset position&rdquo; restores the default
+          </p>
         </div>
         <aside className="w-full lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:flex-1 lg:overflow-y-auto">
           <EditChat productId={product.id} initialLessons={lessons} />

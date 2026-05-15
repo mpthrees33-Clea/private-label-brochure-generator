@@ -34,4 +34,23 @@ export interface BrochureData {
   /** Optional footnotes shown under the sizes matrix */
   footnotes: string[];
   techSpecs: Partial<TechSpecs>;
+  /** Per-block manual position overrides set by the rep in the
+   *  drag-to-position editor. Missing keys use the layout defaults. */
+  layoutOverrides?: LayoutOverrides;
 }
+
+/** Identifiers for every block the rep can reposition on the brochure. */
+export type BlockId =
+  | "description"
+  | "swatches"
+  | "sizeMatrix"
+  | "techSpecs"
+  | "contact";
+
+/** Override coordinates are page-relative pixels at 96 DPI (Letter = 816×1056). */
+export interface BlockPosition {
+  x: number;
+  y: number;
+}
+
+export type LayoutOverrides = Partial<Record<BlockId, BlockPosition>>;

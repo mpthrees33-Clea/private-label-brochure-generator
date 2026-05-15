@@ -1,4 +1,4 @@
-import type { BrochureData } from "./brochure-types";
+import type { BlockId, BrochureData } from "./brochure-types";
 
 // Letter at 96 DPI: 816 × 1056 px.
 export const PAGE_W = 816;
@@ -92,3 +92,28 @@ export function getSwatchLayout(data: BrochureData): SwatchLayout {
   const hasDeco = data.colors.some((c) => c.decoImageUrl);
   return computeSwatchLayout(data.colors.length, hasDeco);
 }
+
+/** Default page-relative coords for every draggable block. Page is which
+ *  brochure page (1 = cover, 2 = specs). Width is locked per block — the
+ *  drag editor only repositions, never resizes.
+ *
+ *  These numbers reproduce the original flow layout exactly. If you change
+ *  one, regenerate a reference PDF and diff against the Kendall/Torrance
+ *  PDFs before merging. */
+export const BLOCK_DEFAULTS: Record<
+  BlockId,
+  { page: 1 | 2; x: number; y: number; width: number }
+> = {
+  // Page 1: hero ends around y=874 (HEADER_H 100 + mt-4 16 + 720*20/19 ≈ 758).
+  description: { page: 1, x: PAGE_PADDING_X, y: 890, width: CONTENT_W },
+  // Page 2: swatches sit just below the header.
+  swatches:    { page: 2, x: PAGE_PADDING_X, y: HEADER_H + 12, width: CONTENT_W },
+  // sizeMatrix's default y is computed from the swatch layout — see
+  // resolveBlockPosition() in Brochure.tsx. This static fallback is only
+  // used when no swatch layout is available.
+  sizeMatrix:  { page: 2, x: PAGE_PADDING_X, y: 600, width: CONTENT_W },
+  // Bottom row pinned at PAGE_H - BOTTOM_BLOCK_H (888), padded 28 from
+  // the page bottom. Tech specs takes the left portion, contact the right.
+  techSpecs:   { page: 2, x: PAGE_PADDING_X, y: PAGE_H - BOTTOM_BLOCK_H, width: 524 },
+  contact:     { page: 2, x: PAGE_W - PAGE_PADDING_X - 172, y: PAGE_H - BOTTOM_BLOCK_H, width: 172 },
+};

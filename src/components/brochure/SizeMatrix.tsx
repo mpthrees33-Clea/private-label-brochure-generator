@@ -11,7 +11,7 @@ export function SizeMatrix({
   availability: Record<string, string[]>;
 }) {
   return (
-    <div className="px-[48px]">
+    <div>
       <h3 className="text-[12px] lowercase text-brochure-gray">sizes</h3>
       <table className="mt-1 w-full border-collapse text-[10px] lowercase leading-tight text-brochure-gray">
         <thead>

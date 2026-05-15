@@ -1,10 +1,15 @@
-import type { BrochureData } from "@/lib/brochure-types";
+import type {
+  BlockId,
+  BrochureData,
+  BlockPosition,
+} from "@/lib/brochure-types";
 import {
+  BLOCK_DEFAULTS,
   PAGE_W,
   PAGE_H,
   HEADER_H,
-  BOTTOM_BLOCK_H,
   getSwatchLayout,
+  type SwatchLayout,
 } from "@/lib/brochure-layout";
 import { renderDescription } from "@/lib/brochure-description";
 import { proxyImageUrl } from "@/lib/image-proxy";
@@ -13,6 +18,41 @@ import { ColorSwatchGrid } from "./ColorSwatchGrid";
 import { SizeMatrix } from "./SizeMatrix";
 import { TechSpecsTable } from "./TechSpecsTable";
 import { ContactBlock } from "./ContactBlock";
+
+// Vertical geometry for the page-2 mid-section. Swatches stack into rows
+// then size matrix flows immediately below them. Used to compute a sane
+// DEFAULT y for the sizeMatrix block — once the rep drags it, the
+// override coord wins.
+const PAGE2_TOP = HEADER_H + 12;
+const SECTION_GAP = 8;
+const SWATCH_LABEL_H = 18;
+const SWATCH_ROW_GAP_BETWEEN_ROWS = 8;
+
+function defaultSizeMatrixY(data: BrochureData, swatch: SwatchLayout): number {
+  const hasDeco = data.colors.some((c) => c.decoImageUrl);
+  const visualRowsPerPrimary = hasDeco ? 2 : 1;
+  const visualRows = swatch.primaryRows * visualRowsPerPrimary;
+  const swatchH =
+    visualRows * (swatch.height + SWATCH_LABEL_H) +
+    Math.max(0, visualRows - 1) * SWATCH_ROW_GAP_BETWEEN_ROWS;
+  return PAGE2_TOP + swatchH + SECTION_GAP;
+}
+
+export function resolveBlockPosition(
+  id: BlockId,
+  data: BrochureData,
+  swatch: SwatchLayout,
+): BlockPosition & { width: number; page: 1 | 2 } {
+  const defaults = BLOCK_DEFAULTS[id];
+  const dynamicY = id === "sizeMatrix" ? defaultSizeMatrixY(data, swatch) : defaults.y;
+  const override = data.layoutOverrides?.[id];
+  return {
+    page: defaults.page,
+    width: defaults.width,
+    x: override?.x ?? defaults.x,
+    y: override?.y ?? dynamicY,
+  };
+}
 
 export function Brochure({
   data,
@@ -23,10 +63,11 @@ export function Brochure({
    * name occurrence in the description. */
   factoryName?: string;
 }) {
+  const swatch = getSwatchLayout(data);
   return (
     <div className="brochure-root flex flex-col items-center gap-6 bg-[#e6e8eb] py-6">
       <Page1 data={data} factoryName={factoryName} />
-      <Page2 data={data} />
+      <Page2 data={data} swatch={swatch} />
     </div>
   );
 }
@@ -43,17 +84,18 @@ function Page1({
     data.trinityName,
     factoryName,
   );
+  const descPos = resolveBlockPosition("description", data, getSwatchLayout(data));
   return (
     <section
-      className="brochure-page flex flex-col overflow-hidden bg-white shadow-md"
+      className="brochure-page relative overflow-hidden bg-white shadow-md"
       style={{ width: PAGE_W, height: PAGE_H }}
     >
       <TrinityHeader
         productName={data.trinityName}
         tagline={data.trinityTagline}
       />
+      {/* Hero stays in-flow — not draggable per spec. */}
       <div className="mt-4 px-[48px]">
-        {/* Hero ~0.95 aspect ratio in the reference */}
         <div className="aspect-[19/20] w-full overflow-hidden bg-[#f3f3f3]">
           {data.heroImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -65,23 +107,20 @@ function Page1({
           ) : null}
         </div>
       </div>
-      <div className="mt-4 px-[48px]">
+      <Block id="description" pos={descPos}>
         <p className="text-[14px] leading-snug text-[#1a1a1a]">
           {renderedDescription}
         </p>
-      </div>
+      </Block>
     </section>
   );
 }
 
-function Page2({ data }: { data: BrochureData }) {
-  const swatch = getSwatchLayout(data);
-  // Middle content (swatches + size matrix) is pinned BETWEEN the header
-  // and the tech-specs block. Its height is bounded, and overflow:hidden
-  // clips anything that doesn't fit. The bottom row is absolutely
-  // positioned so the tech specs CANNOT be pushed off the page no matter
-  // what the middle content does — bulletproof.
-  const middleHeight = PAGE_H - HEADER_H - BOTTOM_BLOCK_H;
+function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
+  const swatchesPos = resolveBlockPosition("swatches", data, swatch);
+  const sizeMatrixPos = resolveBlockPosition("sizeMatrix", data, swatch);
+  const techSpecsPos = resolveBlockPosition("techSpecs", data, swatch);
+  const contactPos = resolveBlockPosition("contact", data, swatch);
   return (
     <section
       className="brochure-page relative overflow-hidden bg-white shadow-md"
@@ -91,51 +130,70 @@ function Page2({ data }: { data: BrochureData }) {
         productName={data.trinityName}
         tagline={data.trinityTagline}
       />
-      <div
-        className="overflow-hidden"
-        style={{ height: middleHeight }}
-      >
-        <div className="mt-3 space-y-1.5">
-          <ColorSwatchGrid
-            colors={data.colors}
-            swatchWidth={swatch.width}
-            perRow={swatch.perRow}
-          />
-          <SizeMatrix
-            sizes={data.sizes}
-            colors={data.colors}
-            availability={data.availability}
-          />
-          {(data.finishLegend.length > 0 || data.footnotes.length > 0) && (
-            <div className="flex justify-between px-[48px] text-[10px] lowercase text-brochure-gray">
-              <div>
-                {data.footnotes.map((f) => (
-                  <p key={f}>{f}</p>
-                ))}
-              </div>
-              <div className="flex items-center gap-3">
-                {data.finishLegend.map((l) => (
-                  <span key={l} className="flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-full bg-brochure-gray" />
-                    {l}
-                  </span>
-                ))}
-              </div>
+      <Block id="swatches" pos={swatchesPos}>
+        <ColorSwatchGrid
+          colors={data.colors}
+          swatchWidth={swatch.width}
+          perRow={swatch.perRow}
+        />
+      </Block>
+      <Block id="sizeMatrix" pos={sizeMatrixPos}>
+        <SizeMatrix
+          sizes={data.sizes}
+          colors={data.colors}
+          availability={data.availability}
+        />
+        {(data.finishLegend.length > 0 || data.footnotes.length > 0) && (
+          <div className="mt-1.5 flex justify-between text-[10px] lowercase text-brochure-gray">
+            <div>
+              {data.footnotes.map((f) => (
+                <p key={f}>{f}</p>
+              ))}
             </div>
-          )}
-        </div>
-      </div>
-      {/* Bottom block: pinned to the page bottom, fixed reserved height,
-          overflow-hidden so nothing inside can extend past it either. */}
-      <div
-        className="absolute left-0 right-0 bottom-0 overflow-hidden flex items-start justify-between gap-6 px-[48px] pb-[28px]"
-        style={{ height: BOTTOM_BLOCK_H }}
-      >
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <TechSpecsTable specs={data.techSpecs} />
-        </div>
+            <div className="flex items-center gap-3">
+              {data.finishLegend.map((l) => (
+                <span key={l} className="flex items-center gap-1">
+                  <span className="inline-block h-2 w-2 rounded-full bg-brochure-gray" />
+                  {l}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </Block>
+      <Block id="techSpecs" pos={techSpecsPos}>
+        <TechSpecsTable specs={data.techSpecs} />
+      </Block>
+      <Block id="contact" pos={contactPos}>
         <ContactBlock />
-      </div>
+      </Block>
     </section>
+  );
+}
+
+/** Absolute-positioned block shell shared by view and edit modes. The
+ * editor finds these via [data-block-id] to attach drag handlers without
+ * forking the renderer. */
+function Block({
+  id,
+  pos,
+  children,
+}: {
+  id: BlockId;
+  pos: { x: number; y: number; width: number };
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      data-block-id={id}
+      style={{
+        position: "absolute",
+        left: pos.x,
+        top: pos.y,
+        width: pos.width,
+      }}
+    >
+      {children}
+    </div>
   );
 }
