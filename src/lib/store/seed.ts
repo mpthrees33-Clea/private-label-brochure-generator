@@ -28,28 +28,54 @@ export const SEED_PRODUCTS: Product[] = [
   {
     id: "seed-lunett",
     ...LUNETT_SAMPLE,
-    factory: "(edit me)",
-    factoryName: "(edit me)",
-    factoryUrl: "https://trinitysurfaces.com/reference/lunett",
+    factory: "Panaria",
+    factoryName: "Moondance",
+    factoryUrl: "https://www.panaria.us/products/collection/moondance",
     createdAt: "2026-01-02T00:00:00.000Z",
     updatedAt: "2026-01-02T00:00:00.000Z",
   },
   {
     id: "seed-oberlin",
     ...OBERLIN_SAMPLE,
-    factory: "(edit me)",
-    factoryName: "(edit me)",
-    factoryUrl: "https://trinitysurfaces.com/reference/oberlin",
+    factory: "Atlas Concorde Italy",
+    factoryName: "Log",
+    factoryUrl: "https://www.atlasconcorde.com/en/ac-collection/log",
     createdAt: "2026-01-03T00:00:00.000Z",
     updatedAt: "2026-01-03T00:00:00.000Z",
   },
   {
     id: "seed-torrance",
     ...TORRANCE_SAMPLE,
-    factory: "(edit me)",
-    factoryName: "(edit me)",
-    factoryUrl: "https://trinitysurfaces.com/reference/torrance",
+    factory: "Ragno",
+    factoryName: "Forum",
+    factoryUrl: "https://www.ragnousa.com/collections/forum-series/",
     createdAt: "2026-01-04T00:00:00.000Z",
     updatedAt: "2026-01-04T00:00:00.000Z",
   },
 ];
+
+/** One-shot fixups for the 3 reference seeds that originally shipped with
+ *  "(edit me)" placeholders. Applied during product load so existing
+ *  Vercel deployments inherit the real factory metadata without
+ *  re-seeding. Only patches rows that still have the placeholder values,
+ *  so any manual edits the rep has made survive. */
+export const SEED_BACKFILL: Record<
+  string,
+  { factory: string; factoryName: string; factoryUrl: string }
+> = {
+  "seed-lunett": {
+    factory: "Panaria",
+    factoryName: "Moondance",
+    factoryUrl: "https://www.panaria.us/products/collection/moondance",
+  },
+  "seed-oberlin": {
+    factory: "Atlas Concorde Italy",
+    factoryName: "Log",
+    factoryUrl: "https://www.atlasconcorde.com/en/ac-collection/log",
+  },
+  "seed-torrance": {
+    factory: "Ragno",
+    factoryName: "Forum",
+    factoryUrl: "https://www.ragnousa.com/collections/forum-series/",
+  },
+};

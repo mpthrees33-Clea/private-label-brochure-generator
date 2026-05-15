@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listProducts } from "@/lib/store/products";
-import { ArrowRight, Eye, Plus, Table2 } from "lucide-react";
+import { ArrowRight, Plus, Table2 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -29,39 +29,32 @@ export default async function DashboardPage() {
         </Link>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Link
           href="/internal/scrape"
-          className="rounded-lg border border-divider bg-surface p-5 transition hover:border-accent"
+          className="flex items-center gap-3 rounded-lg border border-divider bg-surface px-4 py-3 transition hover:border-accent"
         >
-          <Plus className="h-5 w-5 text-accent" />
-          <h2 className="mt-3 text-base font-semibold">Scrape a factory URL</h2>
-          <p className="mt-1 text-sm text-fg-muted">
-            Paste any product page from a supported factory — Claude
-            extracts the colors, sizes, and specs.
-          </p>
-        </Link>
-        <Link
-          href="/internal/brochure/preview"
-          target="_blank"
-          className="rounded-lg border border-divider bg-surface p-5 transition hover:border-accent"
-        >
-          <Eye className="h-5 w-5 text-accent" />
-          <h2 className="mt-3 text-base font-semibold">Sample brochure</h2>
-          <p className="mt-1 text-sm text-fg-muted">
-            Hard-coded Kendall layout to compare against your reference PDFs.
-          </p>
+          <Plus className="h-5 w-5 shrink-0 text-accent" />
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold">Scrape a factory URL</h2>
+            <p className="text-xs text-fg-muted">
+              Paste any product page — Claude extracts colors, sizes, specs.
+            </p>
+          </div>
         </Link>
         <Link
           href="/crossover"
-          className="rounded-lg border border-divider bg-surface p-5 transition hover:border-accent"
+          className="flex items-center gap-3 rounded-lg border border-divider bg-surface px-4 py-3 transition hover:border-accent"
         >
-          <Table2 className="h-5 w-5 text-accent" />
-          <h2 className="mt-3 text-base font-semibold">Crossover list</h2>
-          <p className="mt-1 text-sm text-fg-muted">
-            {products.length} {products.length === 1 ? "collection" : "collections"}{" "}
-            saved. Export as XLSX.
-          </p>
+          <Table2 className="h-5 w-5 shrink-0 text-accent" />
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold">Crossover list</h2>
+            <p className="text-xs text-fg-muted">
+              {products.length}{" "}
+              {products.length === 1 ? "collection" : "collections"} saved.
+              Export as XLSX.
+            </p>
+          </div>
         </Link>
       </div>
 

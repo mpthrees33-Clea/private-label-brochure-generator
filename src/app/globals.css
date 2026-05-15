@@ -10,8 +10,18 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background-color: #0a0e14;
-  color: #f5f9ff;
+  /* Subtle warm gradient — keeps the UI from feeling like a flat dark
+     terminal. Top-left is the bg token, bottom-right shifts toward a
+     hair more red to add warmth without leaving the brand palette. */
+  background-color: #161a26;
+  background-image: radial-gradient(
+    ellipse at top left,
+    #1c2030 0%,
+    #161a26 50%,
+    #131724 100%
+  );
+  background-attachment: fixed;
+  color: #f4f6fb;
 }
 
 /* Brochure print stylesheet — only applies under /internal/brochure */

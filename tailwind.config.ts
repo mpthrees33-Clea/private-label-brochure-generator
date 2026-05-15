@@ -5,22 +5,26 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: "#0a0e14",
+        // Warmer dark-blue slate (was pure cool navy). Same brand spirit
+        // but the undertone has more red, less green-cyan — reads less
+        // "techy terminal", more "muted Scandinavian study".
+        bg: "#161a26",
         surface: {
-          DEFAULT: "#121821",
-          1: "#161e2a",
-          2: "#1a2230",
+          DEFAULT: "#1f2532",
+          1: "#262d3c",
+          2: "#2e3647",
         },
         divider: {
-          DEFAULT: "#222e3f",
-          strong: "#2c3a4f",
+          DEFAULT: "#33405a",
+          strong: "#41506e",
         },
         fg: {
-          DEFAULT: "#f5f9ff",
-          muted: "#9aa9bc",
-          faint: "#5b6b80",
+          DEFAULT: "#f4f6fb",
+          muted: "#a8b3c6",
+          faint: "#6c7891",
         },
         accent: {
+          // Trinity blue — sampled from the logo, locked.
           DEFAULT: "#177AA9",
           light: "#3DA3D2",
           dim: "#0e5a7e",

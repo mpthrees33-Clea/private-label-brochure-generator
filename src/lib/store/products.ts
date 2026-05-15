@@ -1,4 +1,4 @@
-import { SEED_PRODUCTS } from "./seed";
+import { SEED_BACKFILL, SEED_PRODUCTS } from "./seed";
 import { readJsonStore, writeJsonStore } from "./blob-storage";
 import type { Product } from "./types";
 
@@ -10,6 +10,26 @@ import type { Product } from "./types";
 // than the POST that created the product.
 const PATHNAME = "store/products.json";
 
+// Existing deployments shipped with "(edit me)" placeholders for the 3
+// reference seeds. Backfill them on read so the rep no longer sees those
+// strings in the crossover. Manual edits are preserved — we only touch
+// rows that still hold a placeholder.
+function backfillSeedPlaceholders(
+  products: Product[],
+): { products: Product[]; changed: boolean } {
+  let changed = false;
+  const next = products.map((p) => {
+    const fix = SEED_BACKFILL[p.id];
+    if (!fix) return p;
+    const placeholderFactory =
+      p.factory === "(edit me)" || p.factoryName === "(edit me)";
+    if (!placeholderFactory) return p;
+    changed = true;
+    return { ...p, ...fix };
+  });
+  return { products: next, changed };
+}
+
 async function load(): Promise<Product[]> {
   const products = await readJsonStore<Product[] | null>(PATHNAME, null);
   if (products && products.length > 0) {
@@ -20,12 +40,13 @@ async function load(): Promise<Product[]> {
     // failure is what surfaces the misconfiguration on actual saves.
     const existingIds = new Set(products.map((p) => p.id));
     const missingSeeds = SEED_PRODUCTS.filter((p) => !existingIds.has(p.id));
-    if (missingSeeds.length > 0) {
-      const merged = [...products, ...missingSeeds];
+    let merged = missingSeeds.length > 0 ? [...products, ...missingSeeds] : products;
+    const backfill = backfillSeedPlaceholders(merged);
+    merged = backfill.products;
+    if (missingSeeds.length > 0 || backfill.changed) {
       writeJsonStore(PATHNAME, merged).catch(() => {});
-      return merged;
     }
-    return products;
+    return merged;
   }
   // First run — seed. Persist best-effort.
   const seeded = [...SEED_PRODUCTS];
