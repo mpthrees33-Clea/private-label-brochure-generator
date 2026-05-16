@@ -64,16 +64,20 @@ export default async function CrossoverPage() {
         ) : (
           products.map((p) => (
             <details key={p.id} className="group border-t border-divider">
-              <summary className="grid cursor-pointer grid-cols-[24px_1fr_1fr_1fr_2fr_80px_40px] items-center gap-3 px-3 py-2 text-sm transition hover:bg-surface-1 [&::-webkit-details-marker]:hidden">
+              <summary className="grid list-none cursor-pointer grid-cols-[24px_1fr_1fr_1fr_2fr_80px_40px] items-center gap-3 px-3 py-2 text-sm transition hover:bg-surface-1 [&::-webkit-details-marker]:hidden">
                 <ChevronRight className="h-4 w-4 text-fg-faint transition group-open:rotate-90" />
                 <span>{p.factory}</span>
                 <span>{p.factoryName}</span>
                 <span className="lowercase">{p.trinityName}</span>
+                {/* Plain anchors — no onClick stopPropagation because
+                    this is a server component and event handlers can't
+                    be serialized. Side effect: clicking the link also
+                    toggles the row open, but since the link navigates
+                    away (or opens a new tab), it's not noticeable. */}
                 <a
                   href={p.factoryUrl}
                   target="_blank"
                   rel="noreferrer"
-                  onClick={(e) => e.stopPropagation()}
                   className="truncate text-accent hover:underline"
                 >
                   {p.factoryUrl}
@@ -83,7 +87,6 @@ export default async function CrossoverPage() {
                 </span>
                 <Link
                   href={`/products/${p.id}`}
-                  onClick={(e) => e.stopPropagation()}
                   className="text-fg-muted hover:text-accent"
                   title="Open brochure"
                 >
