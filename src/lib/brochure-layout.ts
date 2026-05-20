@@ -104,6 +104,10 @@ export const BLOCK_DEFAULTS: Record<
   BlockId,
   { page: 1 | 2; x: number; y: number; width: number }
 > = {
+  // Page 1: hero — sits ~16px below the header (HEADER_H=100) and spans
+  // the content width. Aspect-ratio 19:20 → height = CONTENT_W * 20/19 ≈ 758.
+  // Y is independently movable so the rep can nudge it up/down a bit.
+  hero:        { page: 1, x: PAGE_PADDING_X, y: HEADER_H + 16, width: CONTENT_W },
   // Page 1: hero ends around y=874 (HEADER_H 100 + mt-4 16 + 720*20/19 ≈ 758).
   description: { page: 1, x: PAGE_PADDING_X, y: 890, width: CONTENT_W },
   // Page 2: swatches sit just below the header.

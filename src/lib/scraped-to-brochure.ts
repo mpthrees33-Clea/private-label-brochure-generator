@@ -25,6 +25,7 @@ export function scrapedToBrochure(
       iconKind: s.iconKind,
       isDeco: s.isDeco ?? false,
       footnoteRef: null,
+      finishes: s.finishes,
     })),
     availability: lowercaseKeys(p.availability),
     finishLegend: p.finishLegend,

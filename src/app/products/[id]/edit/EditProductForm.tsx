@@ -156,14 +156,18 @@ export function EditProductForm({ product }: { product: Product }) {
         <Read
           label="Source"
           value={
-            <a
-              href={product.factoryUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-accent hover:underline"
-            >
-              {product.factoryUrl}
-            </a>
+            product.factoryUrl ? (
+              <a
+                href={product.factoryUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent hover:underline"
+              >
+                {product.factoryUrl}
+              </a>
+            ) : (
+              <span className="text-fg-faint">PDF upload (no URL)</span>
+            )
           }
         />
         <Read

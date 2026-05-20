@@ -18,6 +18,12 @@ export interface BrochureSize {
   iconKind: SizeIcon;
   isDeco?: boolean;
   footnoteRef?: string | null;
+  /** Finishes this size column comes in. Overrides the global
+   *  finishLegend for chart-marker rendering when set. Used when a
+   *  size is finish-restricted — e.g. Lunett's 24"x48" paver is grip
+   *  only, Torrance's 12"x24" deco is textured only. When unset, the
+   *  size inherits the global finishLegend. */
+  finishes?: string[];
 }
 
 export interface BrochureData {
@@ -41,6 +47,7 @@ export interface BrochureData {
 
 /** Identifiers for every block the rep can reposition on the brochure. */
 export type BlockId =
+  | "hero"
   | "description"
   | "swatches"
   | "sizeMatrix"

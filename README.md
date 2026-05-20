@@ -1,11 +1,16 @@
 # Quick Flip Brochures
 
 Trinity Surfaces private-label brochure generator. A rep pastes a
-factory product URL, the app scrapes the page with Claude, renders
-a Trinity-branded 2-page PDF, and appends the product to a master
-crossover list (exportable to XLSX).
+factory product URL **or uploads a factory PDF**, the app extracts
+the product info with Claude, renders a Trinity-branded 2-page PDF,
+and appends the product to a master crossover list (exportable to XLSX).
 
-**Live:** https://private-label-brochure-generator.vercel.app
+**Live:** https://brochures.clea-solutions.ai
+
+> **AI assistants / forks / white-labels:** read [CLAUDE.md](./CLAUDE.md)
+> first — it covers the full architecture, the no-hallucination
+> defenses in the scraper, and a complete map of every distributor-
+> specific item if you're rebranding the app for a different company.
 
 ---
 
@@ -79,23 +84,38 @@ crossover list (exportable to XLSX).
 ## Tech stack
 
 - Next.js 14 (App Router) + TypeScript
-- Tailwind (Sales Hub design tokens, Trinity blue `#177AA9`)
-- `puppeteer-core` + `@sparticuz/chromium-min` for PDF gen (Vercel)
+- Tailwind (custom token palette, Trinity blue `#177AA9`)
+- Puppeteer + system Google Chrome for PDF rendering
 - `cheerio` + `@anthropic-ai/sdk` (`claude-sonnet-4-6`) for scraping
 - `exceljs` for crossover XLSX export
-- Vercel deploy via `mpthrees33-Clea/private-label-brochure-generator`
+- Filesystem JSON store (`/var/lib/qfb` on the VPS)
+- NextAuth Credentials (shared password)
 
-## Env vars (Vercel)
+## Deployment
+
+Self-hosted on the `srv1410919` VPS behind nginx + PM2.
+
+```bash
+./deploy.sh         # rsync source, build on the VPS, restart PM2
+./deploy.sh logs    # also tail PM2 logs after deploying
+```
+
+Build runs **on the VPS** (not locally) so the `.next/standalone` bundle
+matches the VPS's exact Node + glibc. Secrets live in
+`/var/www/quick-flip-brochures/.env.production` on the VPS and never
+ride through rsync.
+
+## Env vars
 
 | Name | Required | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | yes | Scraping. Without it, `/internal/scrape` errors. |
-| `SHARED_PASSWORD` | future | Rep login (NextAuth Credentials). |
-| `NEXTAUTH_SECRET` | future | NextAuth session signing. |
-| `NEXTAUTH_URL` | future | Production URL for NextAuth callbacks. |
-| `DATABASE_URL` | future | Postgres connection when swapping out the JSON store. |
-| `BLOB_READ_WRITE_TOKEN` | future | Vercel Blob storage for persisting rendered PDFs. |
-| `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` | yes | Set to `1` so the build doesn't fetch Playwright browsers. |
+| `ANTHROPIC_API_KEY` | yes | All AI calls (scrape, edit chat, spec backfill) |
+| `SHARED_PASSWORD` | yes in prod | Login (NextAuth Credentials) |
+| `NEXTAUTH_SECRET` | yes in prod | Session signing |
+| `NEXTAUTH_URL` | yes in prod | Cookie domain |
+| `PUPPETEER_EXECUTABLE_PATH` | yes in prod | Path to system Chromium for PDF render (e.g. `/usr/bin/google-chrome-stable`) |
+| `QFB_DATA_DIR` | optional | Override `/var/lib/qfb` data root |
+| `NEXT_PUBLIC_GA_ID` | optional | Google Analytics measurement ID |
 
 ## Project layout
 

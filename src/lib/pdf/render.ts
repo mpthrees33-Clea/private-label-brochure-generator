@@ -38,15 +38,30 @@ async function getBrowser(): Promise<Browser> {
   return browserPromise;
 }
 
+// Args for a real system chromium (VPS, local dev with apt-installed
+// chromium). The sparticuz lambda flags include --no-zygote and other
+// AWS-Lambda-specific knobs that misbehave on a real multi-process
+// chromium. Self-host runs sandbox-off because we're rendering trusted
+// local HTML, not arbitrary user content.
+const SYSTEM_CHROMIUM_ARGS = [
+  "--no-sandbox",
+  "--disable-setuid-sandbox",
+  "--disable-dev-shm-usage",
+  "--disable-gpu",
+  "--hide-scrollbars",
+  "--mute-audio",
+];
+
 async function launchBrowserWithRetry(maxRetries = 4): Promise<Browser> {
   const local = process.env.PUPPETEER_EXECUTABLE_PATH;
   const executablePath = local || (await chromium.executablePath(CHROMIUM_PACK_URL));
+  const args = local ? SYSTEM_CHROMIUM_ARGS : chromium.args;
 
   let lastErr: unknown;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       return await puppeteer.launch({
-        args: chromium.args,
+        args,
         defaultViewport: { width: 816, height: 1056 },
         executablePath,
         headless: chromiumExt.headless === "shell" ? "shell" : true,

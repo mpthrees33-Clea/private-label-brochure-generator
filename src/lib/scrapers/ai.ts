@@ -9,6 +9,7 @@ Return your answer by calling the extract_product tool exactly once. Do not incl
 
 Rules:
 - Use absolute image URLs (https://...). Pick the cleanest swatch images for "imageUrl" — ideally the standalone color/finish tile photo, not a lifestyle scene.
+- If the source is a PDF spec sheet (no factory URL — images are embedded raster only), use empty string "" for "imageUrl", "decoImageUrl", and "heroImageUrl". The rep will add image URLs on the editing page. Still extract every color name and size from the document.
 - "heroImageUrl" is the best single lifestyle / room-scene image showing the product installed.
 - product name / color names should be reproduced as-is from the factory page (we'll lowercase them downstream).
 - "suggestedTrinityName" is the Trinity-side private-label name. Trinity names US towns/cities: examples already in the catalog are "kendall", "lunett", "oberlin", "torrance". Invent a NEW name in this style — one single lowercase word, evocative of an American place name, that is NOT the factory's product name and NOT any of those 4 examples. Two-syllable place names work best.
@@ -32,8 +33,15 @@ Rules:
   * breakingStrength: "≥ 450 lbf" | "≥ 250 lbs"
   * dcof: "≥ 0.42 wet" | "≥ 0.50 wet" | "matte ≥ 0.50 wet | grip ≥ 0.55 wet"
   Use null for any spec not stated. NEVER add prose like "select sizes" or "(IW+)" — keep it terse.
-- "finishLegend" defaults to ["matte"] if not specified. Use ["matte", "textured"] etc. if the page mentions multiple finishes.
-- Be conservative — if data isn't on the page, set the field to null / empty array. Do not invent specs.`;
+- "finishLegend" is the GLOBAL set of finishes the collection offers (e.g. ["matte"] for a matte-only line, ["matte", "grip"] for matte indoor + grip outdoor, ["matte", "polished"] for both). Defaults to ["matte"] if the page doesn't say. Use lowercase names. Recognized canonical names: "matte", "polished", "grip", "textured". Map vendor synonyms to these (naturale → matte; lappato/gloss → polished; structured/non-slip → grip; brushed → textured).
+- "sizes[].finishes" is per-size — set it WHEN AND ONLY WHEN a specific size is restricted to a subset of the global finishLegend. Examples: a 20mm "paver" or "outdoor" size is typically grip only → ["grip"]; a "deco" size is typically textured only → ["textured"]; a "polished" or "lappato"-labeled size is polished only. Leave finishes UNSET for sizes that come in every finish the collection offers (the renderer falls back to the global legend). NEVER set finishes to all of finishLegend — that's redundant.
+- Be conservative — if data isn't on the page, set the field to null / empty array. Do not invent specs.
+
+ANTI-HALLUCINATION RULES (the most important rules — these override everything else):
+- "documentRecognized" MUST be true ONLY if the source clearly shows a real tile / porcelain / ceramic / flooring product with a brand name, a collection name, and at least one color or size visible in the text. Set it to false for: empty pages, login walls, JS-only pages with no readable content, 404 / error pages, garbled / binary content (e.g. a PDF interpreted as HTML), any page that is NOT a tile/flooring product page. If unsure, set false.
+- "sourceEvidence" must quote 3–6 SHORT verbatim snippets (5–20 words each) directly from the source — color names, size labels, brand name, or country of origin — that prove what you extracted is real. These must appear LITERALLY in the source text. If you can't find such snippets, set documentRecognized to false and leave the array empty.
+- "countryOfOrigin" (used in suggestedTagline): NEVER guess. If "made in <country>" is not LITERALLY stated in the source, leave it out of the tagline entirely. Do not infer from brand name.
+- If documentRecognized is false: still call the tool, but set every other field to empty/null. The caller will abort and surface an error to the user instead of saving the product. Never invent a product to fill the schema.`;
 
 const TOOL_SCHEMA = {
   name: "extract_product",
@@ -42,6 +50,17 @@ const TOOL_SCHEMA = {
   input_schema: {
     type: "object",
     properties: {
+      documentRecognized: {
+        type: "boolean",
+        description:
+          "True ONLY if the source clearly shows a real tile/flooring product with brand, collection name, and visible colors or sizes. False for empty pages, error pages, garbled content (e.g. PDF binary parsed as HTML), or anything that is not a tile/flooring product. When false, every other field MUST be empty/null — the caller will abort instead of saving.",
+      },
+      sourceEvidence: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "3–6 SHORT verbatim snippets (5–20 words each) copied LITERALLY from the source: brand name, collection name, color names, size labels, country of origin. These prove the extraction is grounded. Empty array when documentRecognized is false.",
+      },
       factoryName: {
         type: "string",
         description:
@@ -109,6 +128,12 @@ const TOOL_SCHEMA = {
               enum: ["rectangle", "square", "plank", "mosaic", "bullnose"],
             },
             isDeco: { type: ["boolean", "null"] },
+            finishes: {
+              type: ["array", "null"],
+              items: { type: "string" },
+              description:
+                'OPTIONAL — set only when this size is finish-restricted (e.g. ["grip"] for an outdoor paver, ["textured"] for a deco, ["polished"] for a lappato/polished-only size). Leave null/omitted for sizes that come in the full collection finishLegend.',
+            },
           },
           required: ["label", "iconKind"],
         },
@@ -147,6 +172,8 @@ const TOOL_SCHEMA = {
       },
     },
     required: [
+      "documentRecognized",
+      "sourceEvidence",
       "factoryName",
       "suggestedTrinityName",
       "suggestedTagline",
@@ -179,10 +206,76 @@ export async function scrapeWithAI(
       ? `\n\n[note: HTML truncated from ${cleanedHtml.length} to ${MAX_HTML_CHARS} chars]`
       : "";
 
+  const host = new URL(url).hostname.replace(/^www\./, "");
+  const ext = await runExtraction(client, host, [
+    {
+      type: "text",
+      text: `Factory: ${factory?.display ?? new URL(url).host}
+URL: ${url}
+Page title: ${pageTitle}
+
+Page HTML (cleaned):
+${truncated}${truncatedNote}`,
+    },
+  ]);
+
+  return buildScrapedProduct(ext, {
+    factory: factory?.display ?? new URL(url).host,
+    factoryUrl: url,
+  });
+}
+
+// PDF-upload counterpart to scrapeWithAI. Used when a factory sends a
+// spec sheet for an unreleased product that has no public URL yet.
+// Since there's no host, lessons aren't filtered by domain — we pass
+// "" and the lessons store returns the top global lessons.
+export async function scrapeFromPdfWithAI(
+  pdfBytes: ArrayBuffer,
+  originalFilename: string,
+): Promise<ScrapedProduct> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("ANTHROPIC_API_KEY is not set on the server.");
+  }
+
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const base64 = Buffer.from(pdfBytes).toString("base64");
+
+  const ext = await runExtraction(client, "", [
+    {
+      type: "document",
+      source: {
+        type: "base64",
+        media_type: "application/pdf",
+        data: base64,
+      },
+    } as unknown as Anthropic.TextBlockParam,
+    {
+      type: "text",
+      text: `Source: PDF upload (no factory URL — this is an unreleased product spec sheet).
+Filename: ${originalFilename}
+
+Extract the same structured product info you'd extract from a factory product page. The factory brand name is in the document — pull it from the cover or header.`,
+    },
+  ]);
+
+  return buildScrapedProduct(ext, {
+    factory: ext.factoryName || "(unknown)",
+    factoryUrl: "",
+  });
+}
+
+type UserContentBlock =
+  | { type: "text"; text: string }
+  | Anthropic.TextBlockParam;
+
+async function runExtraction(
+  client: Anthropic,
+  host: string,
+  content: UserContentBlock[],
+): Promise<ExtractedShape> {
   // Inject the most-relevant lessons reps have already taught us via the
   // /products/[id] edit chat. Same-factory lessons rank highest. This
   // is how the scraper learns over time.
-  const host = new URL(url).hostname.replace(/^www\./, "");
   const lessons = await relevantLessonsForScrape(host).catch(() => []);
   const lessonsBlock =
     lessons.length > 0
@@ -202,12 +295,7 @@ export async function scrapeWithAI(
     messages: [
       {
         role: "user",
-        content: `Factory: ${factory?.display ?? new URL(url).host}
-URL: ${url}
-Page title: ${pageTitle}
-
-Page HTML (cleaned):
-${truncated}${truncatedNote}`,
+        content: content as unknown as Anthropic.MessageParam["content"],
       },
     ],
   });
@@ -216,12 +304,38 @@ ${truncated}${truncatedNote}`,
   if (!toolUse || toolUse.type !== "tool_use") {
     throw new Error("Claude did not return a tool_use block.");
   }
-
   const ext = toolUse.input as ExtractedShape;
+
+  // Hard gate — refuse to fabricate. Surfaces a clear error to the rep
+  // instead of silently saving a hallucinated product (this was the
+  // 2026-05-19 "marlow / made in italy" incident: a PDF URL parsed as
+  // HTML returned near-empty content and the AI invented an entire
+  // brochure to satisfy the forced tool call).
+  if (!ext.documentRecognized) {
+    throw new Error(
+      "I couldn't recognize a tile/flooring product in the source. " +
+        "Common causes: the URL points to a PDF (use Upload PDF instead), " +
+        "the page requires JavaScript to render, the page is gated, or it's " +
+        "not actually a product page. Try the direct factory product URL or upload the PDF.",
+    );
+  }
+  if (!Array.isArray(ext.sourceEvidence) || ext.sourceEvidence.length < 2) {
+    throw new Error(
+      "The AI couldn't quote enough source evidence to back up its extraction. " +
+        "Refusing to save a possibly-hallucinated product. Try a different URL or upload the PDF.",
+    );
+  }
+  return ext;
+}
+
+function buildScrapedProduct(
+  ext: ExtractedShape,
+  provenance: { factory: string; factoryUrl: string },
+): ScrapedProduct {
   return {
-    factory: factory?.display ?? new URL(url).host,
+    factory: provenance.factory,
     factoryName: ext.factoryName,
-    factoryUrl: url,
+    factoryUrl: provenance.factoryUrl,
     suggestedTrinityName: normalizeTrinityName(
       ext.suggestedTrinityName,
       ext.factoryName,
@@ -239,6 +353,10 @@ ${truncated}${truncatedNote}`,
       thickness: s.thickness ?? undefined,
       iconKind: s.iconKind as SizeIcon,
       isDeco: s.isDeco ?? false,
+      finishes:
+        s.finishes && s.finishes.length > 0
+          ? s.finishes.map((f) => f.toLowerCase())
+          : undefined,
     })),
     availability: ext.availability ?? {},
     techSpecs: ext.techSpecs ?? {},
@@ -275,6 +393,8 @@ function normalizeTrinityName(suggested: string | undefined, factoryName: string
 }
 
 interface ExtractedShape {
+  documentRecognized?: boolean;
+  sourceEvidence?: string[];
   factoryName: string;
   suggestedTrinityName?: string;
   suggestedTagline?: string;
@@ -286,6 +406,7 @@ interface ExtractedShape {
     thickness?: string | null;
     iconKind: string;
     isDeco?: boolean | null;
+    finishes?: string[] | null;
   }[];
   availability?: Record<string, string[]>;
   techSpecs?: Record<string, string | null>;

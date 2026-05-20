@@ -33,7 +33,16 @@ export async function GET(req: NextRequest) {
   }
   const t0 = Date.now();
   try {
-    const page = await fetchAndCleanPage(url);
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      },
+      redirect: "follow",
+    });
+    if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
+    const html = await res.text();
+    const page = await fetchAndCleanPage(url, html);
     const fetchedMs = Date.now() - t0;
     const product = await scrapeWithAI(url, page.cleanedHtml, page.title);
     return NextResponse.json({

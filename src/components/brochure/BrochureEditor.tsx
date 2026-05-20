@@ -19,6 +19,7 @@ import { Brochure } from "./Brochure";
 const SNAP_PX = 8;
 const DRAG_THRESHOLD_PX = 3;
 const SELECTABLE_BLOCKS: BlockId[] = [
+  "hero",
   "description",
   "swatches",
   "sizeMatrix",

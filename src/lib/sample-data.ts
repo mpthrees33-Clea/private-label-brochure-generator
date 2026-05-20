@@ -83,12 +83,12 @@ export const LUNETT_SAMPLE: BrochureData = {
     { trinityName: "dark gray", imageUrl: "" },
   ],
   sizes: [
-    { label: '24"x48"', iconKind: "rectangle", thickness: "9mm" },
-    { label: '24"x48" paver', iconKind: "rectangle", thickness: "20mm" },
-    { label: '36"x36"', iconKind: "square" },
-    { label: '12"x24"', iconKind: "rectangle" },
-    { label: '12"x14" trapezoid mosaic', iconKind: "mosaic" },
-    { label: '4"x24" bullnose', iconKind: "bullnose" },
+    { label: '24"x48"', iconKind: "rectangle", thickness: "9mm", finishes: ["matte"] },
+    { label: '24"x48" paver', iconKind: "rectangle", thickness: "20mm", finishes: ["grip"] },
+    { label: '36"x36"', iconKind: "square", finishes: ["matte"] },
+    { label: '12"x24"', iconKind: "rectangle", finishes: ["matte"] },
+    { label: '12"x14" trapezoid mosaic', iconKind: "mosaic", finishes: ["matte"] },
+    { label: '4"x24" bullnose', iconKind: "bullnose", finishes: ["matte"] },
   ],
   availability: {
     white: ['24"x48"', '24"x48" paver', '36"x36"', '12"x24"', '12"x14" trapezoid mosaic', '4"x24" bullnose'],
@@ -131,15 +131,19 @@ export const OBERLIN_SAMPLE: BrochureData = {
     { trinityName: "moon rustic", imageUrl: "" },
   ],
   sizes: [
-    { label: '48"x110"', iconKind: "rectangle", thickness: "6mm" },
-    { label: '8"x70"', iconKind: "plank", thickness: "9.5mm" },
-    { label: '7"x60"', iconKind: "plank", thickness: "9mm" },
-    { label: '8"x48"', iconKind: "plank", thickness: "9mm" },
-    { label: '24"x48" paver', iconKind: "rectangle", thickness: "20mm" },
-    { label: '12"x48" paver', iconKind: "plank", thickness: "20mm" },
-    { label: '3"x18" chevron', iconKind: "plank", thickness: "9mm" },
-    { label: '3"x60" bullnose', iconKind: "bullnose" },
-    { label: '3"x48" bullnose', iconKind: "bullnose" },
+    { label: '48"x110"', iconKind: "rectangle", thickness: "6mm", finishes: ["matte"] },
+    { label: '8"x70"', iconKind: "plank", thickness: "9.5mm", finishes: ["matte"] },
+    { label: '7"x60"', iconKind: "plank", thickness: "9mm", finishes: ["matte"] },
+    // Reference brochure shows 8"x48" as matte for the smooth colors and
+    // matte+grip for the rustic colors. Per-size override can't express
+    // that color-dependent split, so we default to matte only — undercount
+    // the rustic cells rather than over-claim grip on the smooth ones.
+    { label: '8"x48"', iconKind: "plank", thickness: "9mm", finishes: ["matte"] },
+    { label: '24"x48" paver', iconKind: "rectangle", thickness: "20mm", finishes: ["grip"] },
+    { label: '12"x48" paver', iconKind: "plank", thickness: "20mm", finishes: ["grip"] },
+    { label: '3"x18" chevron', iconKind: "plank", thickness: "9mm", finishes: ["matte"] },
+    { label: '3"x60" bullnose', iconKind: "bullnose", finishes: ["matte"] },
+    { label: '3"x48" bullnose', iconKind: "bullnose", finishes: ["matte"] },
   ],
   availability: {
     bright: ['48"x110"', '8"x70"', '7"x60"', '8"x48"', '24"x48" paver', '3"x18" chevron', '3"x60" bullnose', '3"x48" bullnose'],
@@ -179,11 +183,11 @@ export const TORRANCE_SAMPLE: BrochureData = {
     { trinityName: "nero", imageUrl: "", decoImageUrl: "" },
   ],
   sizes: [
-    { label: '24"x48"', iconKind: "rectangle", thickness: "9.5mm" },
-    { label: '12"x24"', iconKind: "rectangle", thickness: "8.5mm" },
-    { label: '12"x24" deco', iconKind: "rectangle", thickness: "8.5mm", isDeco: true, footnoteRef: "*" },
-    { label: '12"x12" mosaic', iconKind: "mosaic", thickness: "8.5mm" },
-    { label: '3"x24" bullnose', iconKind: "bullnose" },
+    { label: '24"x48"', iconKind: "rectangle", thickness: "9.5mm", finishes: ["matte"] },
+    { label: '12"x24"', iconKind: "rectangle", thickness: "8.5mm", finishes: ["matte"] },
+    { label: '12"x24" deco', iconKind: "rectangle", thickness: "8.5mm", isDeco: true, footnoteRef: "*", finishes: ["textured"] },
+    { label: '12"x12" mosaic', iconKind: "mosaic", thickness: "8.5mm", finishes: ["matte"] },
+    { label: '3"x24" bullnose', iconKind: "bullnose", finishes: ["matte"] },
   ],
   availability: {
     bianco: ['24"x48"', '12"x24"', '12"x24" deco', '12"x12" mosaic', '3"x24" bullnose'],

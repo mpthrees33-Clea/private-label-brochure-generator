@@ -1,14 +1,19 @@
 import type { BrochureColor, BrochureSize } from "@/lib/brochure-types";
 import { SizeIcon } from "./SizeIcon";
+import { FinishMarker } from "./FinishMarker";
 
 export function SizeMatrix({
   sizes,
   colors,
   availability,
+  finishLegend,
 }: {
   sizes: BrochureSize[];
   colors: BrochureColor[];
   availability: Record<string, string[]>;
+  /** Global finish legend — used as the default for any size that
+   *  doesn't override via `finishes`. */
+  finishLegend: string[];
 }) {
   return (
     <div>
@@ -48,10 +53,19 @@ export function SizeMatrix({
                 {sizes.map((s) => {
                   const key = s.label + (s.isDeco ? " deco" : "");
                   const hit = avail.includes(key) || avail.includes(s.label);
+                  // Per-size override beats the global legend. Empty
+                  // arrays are treated as "use the default" — we don't
+                  // want a stray [] to wipe markers from a real cell.
+                  const cellFinishes =
+                    s.finishes && s.finishes.length > 0 ? s.finishes : finishLegend;
                   return (
                     <td key={s.label} className="py-1 text-center">
                       {hit ? (
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-brochure-gray" />
+                        <span className="inline-flex items-center justify-center gap-0.5">
+                          {cellFinishes.map((f) => (
+                            <FinishMarker key={f} finish={f} />
+                          ))}
+                        </span>
                       ) : null}
                     </td>
                   );

@@ -28,6 +28,10 @@ export interface ScrapedSize {
   thickness?: string;
   iconKind: SizeIcon;
   isDeco?: boolean;
+  /** Finishes this specific size column comes in (e.g. ["matte"] or
+   *  ["grip"] for an outdoor paver). When unset, the chart renderer
+   *  falls back to the global finishLegend. */
+  finishes?: string[];
 }
 
 export interface ScrapedProduct {

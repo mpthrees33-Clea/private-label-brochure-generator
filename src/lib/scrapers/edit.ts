@@ -59,6 +59,12 @@ const APPLY_EDIT_TOOL = {
             },
             isDeco: { type: ["boolean", "null"] },
             footnoteRef: { type: ["string", "null"] },
+            finishes: {
+              type: ["array", "null"],
+              items: { type: "string" },
+              description:
+                'OPTIONAL — per-size finish restriction (e.g. ["grip"] for an outdoor paver, ["textured"] for a deco). Leave null for sizes that come in the full finishLegend.',
+            },
           },
           required: ["label", "iconKind"],
         },

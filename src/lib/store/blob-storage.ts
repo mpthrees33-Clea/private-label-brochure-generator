@@ -3,31 +3,40 @@ import { promises as fs } from "fs";
 import path from "path";
 
 // Storage strategy:
-// - Production (Vercel): Vercel Blob, private access. Reads go through
-//   the @vercel/blob `get` helper (authenticated, not a public fetch).
-//   Writes use `allowOverwrite: true` so we don't have to del-then-put.
-// - Local dev (no token): /tmp JSON files.
+// - Vercel deploys: Vercel Blob (BLOB_READ_WRITE_TOKEN set, access:private).
+// - Self-hosted (VPS/local): filesystem, rooted at QFB_DATA_DIR.
 //
-// We MUST use access:'private' to match the user's existing Blob
-// store — public-access puts get rejected by Vercel.
+// Selection order:
+//   1. QFB_DATA_DIR set → filesystem at that path (self-host).
+//   2. BLOB_READ_WRITE_TOKEN set → Vercel Blob.
+//   3. Otherwise → /tmp JSON files (local dev fallback).
 
 const ACCESS: "private" = "private";
 
 export interface StorageStatus {
-  mode: "blob" | "tmp";
+  mode: "blob" | "fs" | "tmp";
   tokenSet: boolean;
   onVercel: boolean;
+  dataDir: string | null;
   productionMissingToken: boolean;
 }
 
 export function getStorageStatus(): StorageStatus {
+  const dataDir = process.env.QFB_DATA_DIR || null;
   const tokenSet = !!process.env.BLOB_READ_WRITE_TOKEN;
   const onVercel = !!process.env.VERCEL;
+  let mode: "blob" | "fs" | "tmp";
+  if (dataDir) mode = "fs";
+  else if (tokenSet) mode = "blob";
+  else mode = "tmp";
   return {
-    mode: tokenSet ? "blob" : "tmp",
+    mode,
     tokenSet,
     onVercel,
-    productionMissingToken: onVercel && !tokenSet,
+    dataDir,
+    // Only flag this in the original Vercel + no-token combo. Self-host
+    // (QFB_DATA_DIR set) bypasses the token check entirely.
+    productionMissingToken: onVercel && !tokenSet && !dataDir,
   };
 }
 
@@ -43,6 +52,12 @@ function requireConfigured() {
 
 function tmpPathFor(pathname: string): string {
   return path.join("/tmp", "qfb-" + pathname.replace(/[/]/g, "_"));
+}
+
+function fsPathFor(dataDir: string, pathname: string): string {
+  // Mirror the blob layout 1:1 so a Vercel→VPS migration can rsync
+  // products.json straight into $QFB_DATA_DIR/store/products.json.
+  return path.join(dataDir, pathname);
 }
 
 async function readPrivateBlob(pathname: string): Promise<unknown | null> {
@@ -90,8 +105,12 @@ export async function readJsonStore<T>(
     const result = await readPrivateBlob(pathname);
     return (result as T) ?? fallback;
   }
+  const filePath =
+    s.mode === "fs" && s.dataDir
+      ? fsPathFor(s.dataDir, pathname)
+      : tmpPathFor(pathname);
   try {
-    const buf = await fs.readFile(tmpPathFor(pathname), "utf8");
+    const buf = await fs.readFile(filePath, "utf8");
     return JSON.parse(buf) as T;
   } catch {
     return fallback;
@@ -119,10 +138,21 @@ export async function writeJsonStore(
       throw err;
     }
   }
+  const filePath =
+    s.mode === "fs" && s.dataDir
+      ? fsPathFor(s.dataDir, pathname)
+      : tmpPathFor(pathname);
   try {
-    await fs.writeFile(tmpPathFor(pathname), JSON.stringify(data, null, 2));
+    // Ensure parent dir exists — required for nested paths like
+    // "store/products.json" under QFB_DATA_DIR.
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    // Write atomically — power loss / crash mid-write must not leave a
+    // half-written products.json that breaks all subsequent reads.
+    const tmp = filePath + ".tmp";
+    await fs.writeFile(tmp, JSON.stringify(data, null, 2));
+    await fs.rename(tmp, filePath);
   } catch (err) {
-    console.error(`[blob-storage] tmp write failed for ${pathname}:`, err);
+    console.error(`[blob-storage] fs write failed for ${pathname}:`, err);
     throw err;
   }
 }
@@ -149,8 +179,12 @@ export async function deleteJsonStore(pathname: string): Promise<void> {
     }
     return;
   }
+  const filePath =
+    s.mode === "fs" && s.dataDir
+      ? fsPathFor(s.dataDir, pathname)
+      : tmpPathFor(pathname);
   try {
-    await fs.unlink(tmpPathFor(pathname));
+    await fs.unlink(filePath);
   } catch {
     // not present — fine
   }

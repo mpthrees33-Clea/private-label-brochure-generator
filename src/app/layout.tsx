@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Montserrat } from "next/font/google";
 import "./globals.css";
 import { StorageBanner } from "@/components/StorageBanner";
+import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -37,6 +38,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${montserrat.variable} ${brand.variable}`}>
+      <GoogleAnalytics />
       <body className="font-sans antialiased">
         <StorageBanner />
         {children}

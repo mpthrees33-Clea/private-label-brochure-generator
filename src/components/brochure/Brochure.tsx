@@ -18,6 +18,7 @@ import { ColorSwatchGrid } from "./ColorSwatchGrid";
 import { SizeMatrix } from "./SizeMatrix";
 import { TechSpecsTable } from "./TechSpecsTable";
 import { ContactBlock } from "./ContactBlock";
+import { FinishMarker } from "./FinishMarker";
 
 // Vertical geometry for the page-2 mid-section. Swatches stack into rows
 // then size matrix flows immediately below them. Used to compute a sane
@@ -84,6 +85,7 @@ function Page1({
     data.trinityName,
     factoryName,
   );
+  const heroPos = resolveBlockPosition("hero", data, getSwatchLayout(data));
   const descPos = resolveBlockPosition("description", data, getSwatchLayout(data));
   return (
     <section
@@ -94,8 +96,7 @@ function Page1({
         productName={data.trinityName}
         tagline={data.trinityTagline}
       />
-      {/* Hero stays in-flow — not draggable per spec. */}
-      <div className="mt-4 px-[48px]">
+      <Block id="hero" pos={heroPos}>
         <div className="aspect-[19/20] w-full overflow-hidden bg-[#f3f3f3]">
           {data.heroImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -106,7 +107,7 @@ function Page1({
             />
           ) : null}
         </div>
-      </div>
+      </Block>
       <Block id="description" pos={descPos}>
         <p className="text-[14px] leading-snug text-[#1a1a1a]">
           {renderedDescription}
@@ -142,6 +143,7 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
           sizes={data.sizes}
           colors={data.colors}
           availability={data.availability}
+          finishLegend={data.finishLegend}
         />
         {(data.finishLegend.length > 0 || data.footnotes.length > 0) && (
           <div className="mt-1.5 flex justify-between text-[10px] lowercase text-brochure-gray">
@@ -153,7 +155,7 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
             <div className="flex items-center gap-3">
               {data.finishLegend.map((l) => (
                 <span key={l} className="flex items-center gap-1">
-                  <span className="inline-block h-2 w-2 rounded-full bg-brochure-gray" />
+                  <FinishMarker finish={l} variant="legend" />
                   {l}
                 </span>
               ))}

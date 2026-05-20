@@ -11,6 +11,7 @@ import { EditChat } from "./EditChat";
 import { NameEditor } from "./NameEditor";
 import { MissingFieldsPanel } from "./MissingFieldsPanel";
 import { SwatchImageEditor } from "./SwatchImageEditor";
+import { HeroImageEditor } from "./HeroImageEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -46,15 +47,22 @@ export default async function ProductDetailPage({
             />
           </div>
           <p className="mt-2 text-xs text-fg-muted">
-            {product.factory} → {product.factoryName} ·{" "}
-            <a
-              href={product.factoryUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-accent hover:underline"
-            >
-              source
-            </a>
+            {product.factory} → {product.factoryName}
+            {product.factoryUrl ? (
+              <>
+                {" · "}
+                <a
+                  href={product.factoryUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  source
+                </a>
+              </>
+            ) : (
+              <span className="text-fg-faint"> · PDF upload</span>
+            )}
           </p>
         </div>
 
@@ -92,6 +100,7 @@ export default async function ProductDetailPage({
       </header>
 
       <MissingFieldsPanel productId={product.id} missing={missing} />
+      <HeroImageEditor productId={product.id} currentUrl={product.heroImageUrl} />
       <SwatchImageEditor productId={product.id} colors={product.colors} />
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">

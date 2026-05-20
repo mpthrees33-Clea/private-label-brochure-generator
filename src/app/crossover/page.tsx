@@ -74,14 +74,18 @@ export default async function CrossoverPage() {
                     be serialized. Side effect: clicking the link also
                     toggles the row open, but since the link navigates
                     away (or opens a new tab), it's not noticeable. */}
-                <a
-                  href={p.factoryUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="truncate text-accent hover:underline"
-                >
-                  {p.factoryUrl}
-                </a>
+                {p.factoryUrl ? (
+                  <a
+                    href={p.factoryUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="truncate text-accent hover:underline"
+                  >
+                    {p.factoryUrl}
+                  </a>
+                ) : (
+                  <span className="truncate text-fg-faint">PDF upload</span>
+                )}
                 <span className="text-right text-fg-muted">
                   {p.colors.length}
                 </span>

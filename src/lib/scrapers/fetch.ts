@@ -13,24 +13,13 @@ export interface FetchedPage {
   anchors: FetchedAnchor[];
 }
 
-// Fetch a factory product page and produce a Claude-friendly HTML
-// snapshot: chrome (nav/footer) removed, scripts/styles stripped, all
-// image and link URLs absolute, whitespace compressed.
-export async function fetchAndCleanPage(url: string): Promise<FetchedPage> {
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      Accept:
-        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-    },
-    redirect: "follow",
-  });
-  if (!res.ok) {
-    throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
-  }
-  const html = await res.text();
+// Clean already-fetched HTML into a Claude-friendly snapshot: chrome
+// (nav/footer) removed, scripts/styles stripped, all image and link
+// URLs absolute, whitespace compressed. The HTTP fetch is done by the
+// caller so it can sniff Content-Type and route PDFs separately —
+// trying to clean a PDF as HTML is what caused the 2026-05-19 marlow
+// hallucination incident.
+export async function fetchAndCleanPage(url: string, html: string): Promise<FetchedPage> {
   const $ = cheerio.load(html);
 
   // Capture every anchor on the page BEFORE chrome-stripping — spec
