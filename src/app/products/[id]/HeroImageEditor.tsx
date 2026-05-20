@@ -10,6 +10,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { proxyImageUrl } from "@/lib/image-proxy";
+import { recordLesson } from "@/lib/record-lesson";
 
 // Paste-URL editor for the page-1 hero image. Auto-opens when the hero
 // is missing (parallel to SwatchImageEditor's missing-on-open behavior).
@@ -36,6 +37,7 @@ export function HeroImageEditor({
     async (value: string) => {
       setBusy(true);
       setError(null);
+      const wasEmpty = !currentUrl || !currentUrl.trim();
       try {
         const res = await fetch(`/api/products/${productId}`, {
           method: "PATCH",
@@ -46,6 +48,16 @@ export function HeroImageEditor({
           const j = await res.json().catch(() => null);
           throw new Error(j?.error ?? `HTTP ${res.status}`);
         }
+        // If the scraper had given up on the hero (empty), record a
+        // lesson so the next scrape of this factory tries harder.
+        if (wasEmpty) {
+          recordLesson(productId, {
+            kind: "image-fix",
+            field: "heroImageUrl",
+            before: "",
+            after: value,
+          });
+        }
         setDraft("");
         router.refresh();
       } catch (err) {
@@ -55,7 +67,7 @@ export function HeroImageEditor({
         setBusy(false);
       }
     },
-    [productId, router],
+    [productId, currentUrl, router],
   );
 
   async function save() {

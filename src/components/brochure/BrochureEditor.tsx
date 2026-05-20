@@ -15,6 +15,7 @@ import {
   PAGE_W,
 } from "@/lib/brochure-layout";
 import { Brochure } from "./Brochure";
+import { recordLesson } from "@/lib/record-lesson";
 
 const SNAP_PX = 8;
 const DRAG_THRESHOLD_PX = 3;
@@ -136,6 +137,7 @@ export function BrochureEditor({
   const persistOverride = useCallback(
     async (id: BlockId, override: BlockPosition | null) => {
       setSaving(true);
+      const previous = (data.layoutOverrides ?? {})[id] ?? null;
       try {
         await fetch(`/api/products/${productId}`, {
           method: "PATCH",
@@ -145,11 +147,25 @@ export function BrochureEditor({
             layoutOverrides: { [id]: override },
           }),
         });
+        // Record the drag so future products from the same factory can
+        // inherit clustered overrides as their starting position. The
+        // server stores these as kind=drag lessons (not injected into
+        // the AI scrape prompt — they're layout offsets, not text).
+        // Skip "reset to default" clicks (override === null) — they
+        // signal "this was wrong", not "this should be the default".
+        if (override) {
+          recordLesson(productId, {
+            kind: "drag",
+            blockId: id,
+            before: previous,
+            after: override,
+          });
+        }
       } finally {
         setSaving(false);
       }
     },
-    [productId],
+    [productId, data.layoutOverrides],
   );
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {

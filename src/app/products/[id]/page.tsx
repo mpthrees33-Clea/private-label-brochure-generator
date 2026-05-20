@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProduct } from "@/lib/store/products";
 import { listLessonsForProduct } from "@/lib/store/lessons";
+import { factoryLayoutDefaultsFor } from "@/lib/store/factory-layout-defaults";
 import { missingBrochureFields } from "@/lib/brochure-quality";
 import { BrochureEditor } from "@/components/brochure/BrochureEditor";
 import { MobileFit } from "@/components/brochure/MobileFit";
@@ -28,6 +29,23 @@ export default async function ProductDetailPage({
   if (!product) notFound();
   const lessons = await listLessonsForProduct(product.id);
   const missing = missingBrochureFields(product);
+
+  // Compose factory-learned layout defaults UNDER this product's own
+  // overrides. Per-product positions always win — factory defaults only
+  // fill in blocks the rep hasn't touched yet on this specific product.
+  let factoryHost = "";
+  try {
+    factoryHost = product.factoryUrl
+      ? new URL(product.factoryUrl).hostname.replace(/^www\./, "")
+      : "";
+  } catch {
+    factoryHost = "";
+  }
+  const factoryDefaults = factoryHost
+    ? await factoryLayoutDefaultsFor(factoryHost)
+    : {};
+  const mergedOverrides = { ...factoryDefaults, ...(product.layoutOverrides ?? {}) };
+  const productForEditor = { ...product, layoutOverrides: mergedOverrides };
   const canDownload = missing.length === 0;
   const needsRename = product.trinityName === "rename-me";
 
@@ -108,7 +126,7 @@ export default async function ProductDetailPage({
           <MobileFit>
             <BrochureEditor
               productId={product.id}
-              data={product}
+              data={productForEditor}
               factoryName={product.factoryName}
             />
           </MobileFit>

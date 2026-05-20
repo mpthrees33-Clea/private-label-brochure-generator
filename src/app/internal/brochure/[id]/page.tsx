@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Brochure } from "@/components/brochure/Brochure";
 import { getProduct } from "@/lib/store/products";
+import { factoryLayoutDefaultsFor } from "@/lib/store/factory-layout-defaults";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -15,6 +16,25 @@ export default async function SavedBrochurePage({
 }) {
   const product = await getProduct(params.id);
   if (!product) notFound();
+
+  // Match the editor view: factory-learned defaults compose UNDER the
+  // product's own overrides. This keeps the printed PDF identical to
+  // what the rep sees in the in-browser editor.
+  let factoryHost = "";
+  try {
+    factoryHost = product.factoryUrl
+      ? new URL(product.factoryUrl).hostname.replace(/^www\./, "")
+      : "";
+  } catch {
+    factoryHost = "";
+  }
+  const factoryDefaults = factoryHost
+    ? await factoryLayoutDefaultsFor(factoryHost)
+    : {};
+  const productWithDefaults = {
+    ...product,
+    layoutOverrides: { ...factoryDefaults, ...(product.layoutOverrides ?? {}) },
+  };
 
   return (
     <>
@@ -33,7 +53,7 @@ export default async function SavedBrochurePage({
           Download PDF
         </Link>
       </div>
-      <Brochure data={product} factoryName={product.factoryName} />
+      <Brochure data={productWithDefaults} factoryName={product.factoryName} />
     </>
   );
 }

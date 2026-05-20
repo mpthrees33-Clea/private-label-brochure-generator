@@ -17,6 +17,7 @@ import {
   applyPattern,
   type SwatchPattern,
 } from "@/lib/swatch-pattern";
+import { recordLesson } from "@/lib/record-lesson";
 
 // Paste-URL editor for swatch images. The factory scraper sometimes
 // misses lazy-loaded swatches (or returns URLs that 404). The rep can
@@ -172,6 +173,9 @@ export function SwatchImageEditor({
   ) {
     const key = `${idx}:${field}`;
     if (!value) return;
+    const prev = colors[idx]?.[field] ?? "";
+    const wasEmpty = !prev || (typeof prev === "string" && prev.trim() === "");
+    const colorName = colors[idx]?.trinityName;
     setBusy((b) => ({ ...b, [key]: true }));
     setError(null);
     try {
@@ -186,6 +190,15 @@ export function SwatchImageEditor({
       if (!res.ok) {
         const j = await res.json().catch(() => null);
         throw new Error(j?.error ?? `HTTP ${res.status}`);
+      }
+      if (wasEmpty) {
+        recordLesson(productId, {
+          kind: "image-fix",
+          field,
+          colorName,
+          before: "",
+          after: value,
+        });
       }
       setDrafts((d) => {
         const copy = { ...d };

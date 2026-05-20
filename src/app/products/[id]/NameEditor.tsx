@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Check, X } from "lucide-react";
+import { recordLesson } from "@/lib/record-lesson";
 
 // Inline Trinity-name + tagline editor. Click the name (or the pencil)
 // to edit. Enter/blur saves via PATCH /api/products/[id]. Cancel via
@@ -58,6 +59,25 @@ export function NameEditor({
       if (!res.ok) {
         const j = await res.json().catch(() => null);
         throw new Error(j?.error ?? `HTTP ${res.status}`);
+      }
+      // Record rename lessons so future scrapes of the same factory
+      // learn the rep's naming/tagline preferences. The server skips
+      // the placeholder "rename-me" name automatically.
+      if (cleanedName !== initialName) {
+        recordLesson(productId, {
+          kind: "rename",
+          field: "trinityName",
+          before: initialName,
+          after: cleanedName,
+        });
+      }
+      if (cleanedTagline !== initialTagline) {
+        recordLesson(productId, {
+          kind: "rename",
+          field: "trinityTagline",
+          before: initialTagline,
+          after: cleanedTagline,
+        });
       }
       setEditing(false);
       router.refresh();
