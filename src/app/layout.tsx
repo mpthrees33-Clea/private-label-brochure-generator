@@ -1,16 +1,19 @@
 import type { Metadata, Viewport } from "next";
-import { Montserrat } from "next/font/google";
+import { DM_Sans } from "next/font/google";
 import "./globals.css";
 import { StorageBanner } from "@/components/StorageBanner";
 import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 
-const montserrat = Montserrat({
+// DM Sans is the closest free analogue to Trinity's licensed Objektiv —
+// same humanist-geometric character, generous proportions, and a clean
+// rendering at body sizes.
+const dmSans = DM_Sans({
   subsets: ["latin"],
   variable: "--font-sans",
   display: "swap",
 });
 
-const brand = Montserrat({
+const brand = DM_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-brand",
@@ -18,7 +21,7 @@ const brand = Montserrat({
 });
 
 export const metadata: Metadata = {
-  title: "Quick Flip Brochures",
+  title: "Quick Flip Brochures · Trinity Surfaces",
   description: "Trinity Surfaces private-label brochure generator",
 };
 
@@ -37,9 +40,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${montserrat.variable} ${brand.variable}`}>
+    <html lang="en" className={`${dmSans.variable} ${brand.variable}`}>
       <GoogleAnalytics />
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased bg-bg text-fg">
         <StorageBanner />
         {children}
       </body>

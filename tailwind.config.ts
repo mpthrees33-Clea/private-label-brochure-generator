@@ -5,29 +5,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Warmer dark-blue slate (was pure cool navy). Same brand spirit
-        // but the undertone has more red, less green-cyan — reads less
-        // "techy terminal", more "muted Scandinavian study".
-        bg: "#161a26",
+        // Trinity-matched light palette. Sampled from trinitysurfaces.com
+        // and the Trinity tile logo. Token names match the previous dark
+        // palette so all pages re-theme without code changes.
+        bg: "#FFFFFF",
         surface: {
-          DEFAULT: "#1f2532",
-          1: "#262d3c",
-          2: "#2e3647",
+          DEFAULT: "#F7F6F2",
+          1: "#EFEEE7",
+          2: "#E8E0CD", // Trinity warm cream — sparingly, for emphasis bands
         },
         divider: {
-          DEFAULT: "#33405a",
-          strong: "#41506e",
+          DEFAULT: "#E5E4DA",
+          strong: "#D8D7D7", // Trinity divider grey
         },
         fg: {
-          DEFAULT: "#f4f6fb",
-          muted: "#a8b3c6",
-          faint: "#6c7891",
+          DEFAULT: "#0d0f0b", // Trinity warm off-black
+          muted: "#5f6062", // Trinity warm grey
+          faint: "#9C9B96",
         },
         accent: {
           // Trinity blue — sampled from the logo, locked.
           DEFAULT: "#177AA9",
           light: "#3DA3D2",
           dim: "#0e5a7e",
+          wash: "#E7F1F7", // very faint blue for tinted blocks
         },
         success: "#22c55e",
         warning: "#f59e0b",
@@ -47,9 +48,10 @@ const config: Config = {
       },
       boxShadow: {
         "glow-accent":
-          "0 0 0 1px rgba(23,122,169,0.4), 0 4px 20px rgba(23,122,169,0.15)",
+          "0 0 0 1px rgba(23,122,169,0.25), 0 1px 2px rgba(23,122,169,0.06)",
         panel:
-          "0 1px 0 rgba(255,255,255,0.04), 0 8px 24px rgba(0,0,0,0.4)",
+          "0 1px 0 rgba(13,15,11,0.04), 0 4px 14px rgba(13,15,11,0.06)",
+        rest: "0 1px 0 rgba(13,15,11,0.04)",
       },
     },
   },
