@@ -38,7 +38,7 @@ export default async function DashboardPage() {
               Quick Flip Brochures
             </p>
             <h1 className="font-brand text-4xl font-semibold tracking-tight text-fg sm:text-5xl">
-              Private-label any factory product —{" "}
+              Private-label any factory product{" "}
               <span className="text-accent">in 60 seconds.</span>
             </h1>
             <p className="mt-4 text-base text-fg-muted">
@@ -75,7 +75,7 @@ export default async function DashboardPage() {
             <div className="min-w-0">
               <h2 className="text-base font-semibold text-fg">Scrape a factory URL</h2>
               <p className="mt-0.5 text-sm text-fg-muted">
-                Paste any product page — Claude extracts colors, sizes, specs.
+                Paste any product page. Claude extracts colors, sizes, specs.
               </p>
               <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent opacity-0 transition group-hover:opacity-100">
                 Start <ArrowRight className="h-3 w-3" />
