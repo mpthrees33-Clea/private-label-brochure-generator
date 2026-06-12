@@ -58,13 +58,7 @@ export async function GET(req: NextRequest) {
     filename = `${product.trinityName || source}.pdf`;
   }
 
-  const host = req.headers.get("host") ?? "localhost:3000";
-  const protocol = req.headers.get("x-forwarded-proto") ?? "https";
-  const origin =
-    process.env.VERCEL || host !== "localhost:3000"
-      ? `${protocol}://${host}`
-      : `http://${host}`;
-  const target = `${origin}${renderPath}`;
+  const target = `${renderOrigin(req)}${renderPath}`;
 
   try {
     const pdfBytes = await renderBrochurePdf(target);
@@ -88,6 +82,35 @@ export async function GET(req: NextRequest) {
       headers: { "Content-Type": "text/html; charset=utf-8" },
     });
   }
+}
+
+// Origin the headless browser should navigate to when rendering a
+// brochure page. This MUST NOT be the public hostname on the self-hosted
+// VPS: nginx fronts the app with HTTP Basic Auth, so a server-side
+// Puppeteer navigation to https://brochures.clea-solutions.ai/... is
+// challenged for credentials it doesn't have and fails with
+// net::ERR_INVALID_AUTH_CREDENTIALS (a 401). The rep's own browser has
+// the Basic Auth cached, which is why the site works for them but the
+// PDF export — rendered by Chromium with no cookies/credentials — does
+// not. Rendering against the loopback port the Next.js server listens on
+// bypasses nginx (and its auth) entirely. All brochure assets are
+// same-origin (relative paths or the /api/proxy-image wrapper), so they
+// load from loopback too.
+function renderOrigin(req: NextRequest): string {
+  // Explicit override always wins (e.g. a separate internal render host).
+  if (process.env.BROCHURE_RENDER_ORIGIN) {
+    return process.env.BROCHURE_RENDER_ORIGIN.replace(/\/$/, "");
+  }
+  // Vercel (legacy) is serverless — there is no stable loopback to the
+  // same instance, so we must use the public request host there.
+  if (process.env.VERCEL) {
+    const host = req.headers.get("host") ?? "localhost:3000";
+    const protocol = req.headers.get("x-forwarded-proto") ?? "https";
+    return `${protocol}://${host}`;
+  }
+  // Self-host (VPS) and local dev: hit the loopback port directly.
+  const port = process.env.PORT ?? "3000";
+  return `http://127.0.0.1:${port}`;
 }
 
 function escapeHtml(s: string): string {
