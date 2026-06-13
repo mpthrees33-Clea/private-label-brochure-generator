@@ -40,10 +40,20 @@ export interface BrochureData {
   /** Optional footnotes shown under the sizes matrix */
   footnotes: string[];
   techSpecs: Partial<TechSpecs>;
+  /** Representative swatch box aspect = height / width. 2 = legacy 1:2
+   *  portrait tile (12"x24"), 1 = square (6"x6"), 0.5 = 2:1 landscape wall
+   *  tile (12"x6"), 5 = a 2"x10" plank. Undefined → DEFAULT_SWATCH_ASPECT.
+   *  The true ratio is always preserved — the layout engine scales the
+   *  swatch down to fit, it never stretches the shape. */
+  swatchAspect?: number;
   /** Per-block manual position overrides set by the rep in the
    *  drag-to-position editor. Missing keys use the layout defaults. */
   layoutOverrides?: LayoutOverrides;
 }
+
+/** Default swatch aspect (height/width) when a product has no parsed
+ *  field-tile dimensions. Matches the legacy 12"x24" portrait tile. */
+export const DEFAULT_SWATCH_ASPECT = 2;
 
 /** Identifiers for every block the rep can reposition on the brochure. */
 export type BlockId =

@@ -135,6 +135,7 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
         <ColorSwatchGrid
           colors={data.colors}
           swatchWidth={swatch.width}
+          swatchHeight={swatch.height}
           perRow={swatch.perRow}
         />
       </Block>

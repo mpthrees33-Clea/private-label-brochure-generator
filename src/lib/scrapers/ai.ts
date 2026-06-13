@@ -14,10 +14,12 @@ Rules:
 - product name / color names should be reproduced as-is from the factory page (we'll lowercase them downstream).
 - "suggestedTrinityName" is the Trinity-side private-label name. Trinity names US towns/cities: examples already in the catalog are "kendall", "lunett", "oberlin", "torrance". Invent a NEW name in this style — one single lowercase word, evocative of an American place name, that is NOT the factory's product name and NOT any of those 4 examples. Two-syllable place names work best.
 - "suggestedDescription" must be REWRITTEN in Trinity's voice — NEVER copied or paraphrased verbatim from the factory page (the factory's copy is the factory's brand, not Trinity's). Wherever the product name would appear in the description, write the literal token "{{name}}" (with the curly braces) instead of any name. The token is substituted with the Trinity name at render time, so even if the rep later renames it, the description stays consistent. Reference style: "{{name}} captures the raw elegance of poured concrete with soft gradients, subtle texture, and five refined neutrals." Two short sentences, 30-60 words, commercial-flooring tone, no mention of any factory name.
-- "iconKind" picks the icon used on the size chart:
-  * "rectangle" → standard rectangular field tile (e.g. 12"x24", 24"x48")
-  * "square" → 1:1 tile (e.g. 12"x12", 24"x24")
-  * "plank" → narrow tall rectangle (e.g. 6"x24", 8"x48")
+- List EVERY size / format the page shows — check size chips, spec tables, "available formats / sizes" rows, and footnotes. Collections frequently ship an odd format alongside the main field tile (e.g. a 2"x10" plank or a 6"x6" square next to a 12"x24"); omitting one is a defect. Do NOT invent sizes that aren't shown.
+- "widthIn"/"heightIn": parse the size label into nominal face dimensions in INCHES (e.g. '12"x24"' → widthIn 12, heightIn 24; '2"x10"' → widthIn 2, heightIn 10; '6"x6"' → widthIn 6, heightIn 6). Use the first number as width, the second as height, exactly as the label reads (do not reorder). Set BOTH to null when the label has no parseable face dims (mosaics described by chip size, trim/bullnose, or non-numeric labels).
+- "iconKind" picks the icon used on the size chart and MUST agree with the parsed ratio:
+  * "square" → 1:1 tile, width ≈ height (e.g. 12"x12", 24"x24", 6"x6")
+  * "rectangle" → standard rectangular field tile, long side < 3× short side (e.g. 12"x24", 24"x48")
+  * "plank" → long narrow tile, long side ≥ 3× short side (e.g. 6"x24", 8"x48", 2"x10")
   * "mosaic" → mesh sheet of small tiles
   * "bullnose" → long skinny trim piece (e.g. 3"x24" bullnose)
 - "isDeco" is true for the decorative / textured variant of a standard size.
@@ -110,7 +112,8 @@ const TOOL_SCHEMA = {
       },
       sizes: {
         type: "array",
-        description: "All available tile sizes/formats for this product.",
+        description:
+          "EVERY available tile size/format for this product — including odd formats (e.g. a 2\"x10\" plank or 6\"x6\" square) shown alongside the main field tile. Check size chips, spec tables, and footnotes; a missing format is a defect.",
         items: {
           type: "object",
           properties: {
@@ -118,6 +121,16 @@ const TOOL_SCHEMA = {
               type: "string",
               description:
                 'Size label exactly as the factory writes it, e.g. \'12"x24"\', \'6"x24"\', \'3"x24" bullnose\'.',
+            },
+            widthIn: {
+              type: ["number", "null"],
+              description:
+                "Nominal face width in inches parsed from the label (first number), e.g. 2\"x10\" → 2. Null when the label has no parseable face dims (mosaic, trim).",
+            },
+            heightIn: {
+              type: ["number", "null"],
+              description:
+                "Nominal face height in inches parsed from the label (second number), e.g. 2\"x10\" → 10. Null when the label has no parseable face dims.",
             },
             thickness: {
               type: ["string", "null"],
@@ -348,16 +361,22 @@ function buildScrapedProduct(
       imageUrl: c.imageUrl,
       decoImageUrl: c.decoImageUrl ?? undefined,
     })),
-    sizes: (ext.sizes ?? []).map((s) => ({
-      label: s.label,
-      thickness: s.thickness ?? undefined,
-      iconKind: s.iconKind as SizeIcon,
-      isDeco: s.isDeco ?? false,
-      finishes:
-        s.finishes && s.finishes.length > 0
-          ? s.finishes.map((f) => f.toLowerCase())
-          : undefined,
-    })),
+    sizes: (ext.sizes ?? []).map((s) => {
+      const widthIn = parseDim(s.widthIn);
+      const heightIn = parseDim(s.heightIn);
+      return {
+        label: s.label,
+        thickness: s.thickness ?? undefined,
+        iconKind: s.iconKind as SizeIcon,
+        isDeco: s.isDeco ?? false,
+        widthIn,
+        heightIn,
+        finishes:
+          s.finishes && s.finishes.length > 0
+            ? s.finishes.map((f) => f.toLowerCase())
+            : undefined,
+      };
+    }),
     availability: ext.availability ?? {},
     techSpecs: ext.techSpecs ?? {},
     finishLegend:
@@ -365,7 +384,58 @@ function buildScrapedProduct(
         ? ext.finishLegend
         : ["matte"],
     footnotes: ext.footnotes ?? [],
+    swatchAspect: deriveSwatchAspect(ext.sizes ?? []),
   };
+}
+
+/** Coerce a model-provided dimension to a positive finite number, else
+ *  undefined. Guards against nulls, strings, and zero. */
+function parseDim(v: unknown): number | undefined {
+  const n = typeof v === "string" ? parseFloat(v) : v;
+  return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+// iconKind preference for picking the representative field tile when
+// several sizes have parseable dims. The headline tile is normally a
+// rectangle or square; planks/mosaics/trim are secondary formats.
+const FIELD_TILE_PRIORITY: Record<string, number> = {
+  rectangle: 0,
+  square: 1,
+  plank: 2,
+  mosaic: 3,
+  bullnose: 4,
+};
+
+/** Derive the representative swatch aspect (height / width) from the
+ *  product's field tile. Picks the first non-deco size with parseable
+ *  dims, preferring rectangle → square → plank, breaking ties by largest
+ *  face area (the headline tile). Returns undefined when no size has
+ *  dims, so the renderer falls back to the legacy 1:2 portrait tile. The
+ *  ratio is the TRUE label ratio — never clamped. The rep can override it
+ *  later from the edit chat. */
+function deriveSwatchAspect(
+  sizes: ExtractedShape["sizes"],
+): number | undefined {
+  const candidates = (sizes ?? [])
+    .filter((s) => !s.isDeco && s.iconKind !== "mosaic" && s.iconKind !== "bullnose")
+    .map((s) => ({
+      w: parseDim(s.widthIn),
+      h: parseDim(s.heightIn),
+      kind: s.iconKind ?? "rectangle",
+    }))
+    .filter((c): c is { w: number; h: number; kind: string } => !!c.w && !!c.h);
+
+  if (candidates.length === 0) return undefined;
+
+  candidates.sort((a, b) => {
+    const pa = FIELD_TILE_PRIORITY[a.kind] ?? 9;
+    const pb = FIELD_TILE_PRIORITY[b.kind] ?? 9;
+    if (pa !== pb) return pa - pb;
+    return b.w * b.h - a.w * a.h; // larger face area first
+  });
+
+  const tile = candidates[0];
+  return tile.h / tile.w;
 }
 
 // Trinity reserves a small set of names (their existing catalog).
@@ -403,6 +473,8 @@ interface ExtractedShape {
   colors?: { name: string; imageUrl: string; decoImageUrl?: string | null }[];
   sizes?: {
     label: string;
+    widthIn?: number | null;
+    heightIn?: number | null;
     thickness?: string | null;
     iconKind: string;
     isDeco?: boolean | null;
