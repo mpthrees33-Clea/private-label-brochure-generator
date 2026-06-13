@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getProduct } from "@/lib/store/products";
 import { listLessonsForProduct } from "@/lib/store/lessons";
 import { factoryLayoutDefaultsFor } from "@/lib/store/factory-layout-defaults";
-import { missingBrochureFields } from "@/lib/brochure-quality";
+import { missingBrochureFields, brochureAdvisories } from "@/lib/brochure-quality";
 import { BrochureEditor } from "@/components/brochure/BrochureEditor";
 import { MobileFit } from "@/components/brochure/MobileFit";
 import { Download, FileEdit } from "lucide-react";
@@ -29,6 +29,7 @@ export default async function ProductDetailPage({
   if (!product) notFound();
   const lessons = await listLessonsForProduct(product.id);
   const missing = missingBrochureFields(product);
+  const advisories = brochureAdvisories(product);
 
   // Compose factory-learned layout defaults UNDER this product's own
   // overrides. Per-product positions always win — factory defaults only
@@ -117,7 +118,7 @@ export default async function ProductDetailPage({
         </div>
       </header>
 
-      <MissingFieldsPanel productId={product.id} missing={missing} />
+      <MissingFieldsPanel productId={product.id} missing={missing} advisories={advisories} />
       <HeroImageEditor productId={product.id} currentUrl={product.heroImageUrl} />
       <SwatchImageEditor productId={product.id} colors={product.colors} />
 

@@ -1,3 +1,4 @@
+import { DEFAULT_SWATCH_ASPECT } from "./brochure-types";
 import type { BlockId, BrochureData } from "./brochure-types";
 
 // Letter at 96 DPI: 816 × 1056 px.
@@ -39,17 +40,24 @@ export interface SwatchLayout {
 }
 
 // Compute the swatch layout: how many primary rows to use and the
-// largest 1:2 swatch that fits inside page 2. We try 1..MAX_ROWS rows
-// and pick the row count that yields the largest swatch — that way the
-// grid wraps automatically when there are too many colors to fit
-// horizontally at a reasonable size (Bestow case).
+// largest swatch (at the product's true aspect ratio) that fits inside
+// page 2. We try 1..MAX_ROWS rows and pick the row count that yields the
+// largest swatch — that way the grid wraps automatically when there are
+// too many colors to fit horizontally at a reasonable size (Bestow case).
+//
+// `aspect` is height/width: 2 = legacy 12"x24" portrait tile, 1 = square,
+// 0.5 = landscape wall tile, 5 = a 2"x10" plank. The ratio is never
+// clamped or distorted — taller shapes simply yield narrower swatches.
 const MAX_PRIMARY_ROWS = 3;
 
 export function computeSwatchLayout(
   colorCount: number,
   hasDeco: boolean,
+  aspect: number = DEFAULT_SWATCH_ASPECT,
 ): SwatchLayout {
   if (colorCount <= 0) return { width: 0, height: 0, primaryRows: 1, perRow: 0 };
+  // Guard against non-positive/NaN aspect from bad data → legacy default.
+  const a = aspect > 0 ? aspect : DEFAULT_SWATCH_ASPECT;
 
   const sectionGaps = 2; // swatches→matrix, matrix→footnotes
   const sizeMatrixH = estimateSizeMatrixHeight(colorCount);
@@ -77,11 +85,12 @@ export function computeSwatchLayout(
       (CONTENT_W - SWATCH_GAP_X * (perRow - 1)) / perRow,
     );
 
-    // Maintain 1:2 ratio — never distort.
-    const w = Math.max(0, Math.min(maxImageW, Math.floor(maxImageH / 2)));
+    // Maintain the true aspect ratio — never distort. height = w * aspect
+    // ≤ maxImageH by construction, so the page-2 budget always holds.
+    const w = Math.max(0, Math.min(maxImageW, Math.floor(maxImageH / a)));
 
     if (w > best.width) {
-      best = { width: w, height: w * 2, primaryRows, perRow };
+      best = { width: w, height: Math.round(w * a), primaryRows, perRow };
     }
   }
 
@@ -90,7 +99,11 @@ export function computeSwatchLayout(
 
 export function getSwatchLayout(data: BrochureData): SwatchLayout {
   const hasDeco = data.colors.some((c) => c.decoImageUrl);
-  return computeSwatchLayout(data.colors.length, hasDeco);
+  return computeSwatchLayout(
+    data.colors.length,
+    hasDeco,
+    data.swatchAspect ?? DEFAULT_SWATCH_ASPECT,
+  );
 }
 
 /** Default page-relative coords for every draggable block. Page is which

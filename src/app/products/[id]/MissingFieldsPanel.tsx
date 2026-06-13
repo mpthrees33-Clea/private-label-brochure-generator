@@ -2,19 +2,23 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, FileSearch } from "lucide-react";
+import { AlertCircle, FileSearch, Info } from "lucide-react";
 import type { MissingField } from "@/lib/brochure-quality";
 import { MISSING_FIELD_LABELS } from "@/lib/brochure-quality";
 
 // Surfaces what's missing from the brochure + offers a spec-sheet URL
 // backfill for the (common) tech-specs case. Lives at the top of the
 // product detail page so the rep can see the gaps before downloading.
+// Also surfaces non-blocking advisories (e.g. very narrow swatches) that
+// warn without disabling Download.
 export function MissingFieldsPanel({
   productId,
   missing,
+  advisories = [],
 }: {
   productId: string;
   missing: MissingField[];
+  advisories?: string[];
 }) {
   const router = useRouter();
   const [specUrl, setSpecUrl] = useState("");
@@ -62,7 +66,25 @@ export function MissingFieldsPanel({
     }
   }
 
-  if (missing.length === 0) return null;
+  if (missing.length === 0) {
+    if (advisories.length === 0) return null;
+    // Only soft advisories — render an amber, non-blocking note.
+    return (
+      <div className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+        <div className="flex items-start gap-2">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-300">Heads up (won&apos;t block download):</p>
+            <ul className="mt-1 list-disc pl-5 text-fg-muted">
+              {advisories.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mb-4 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs">
@@ -77,6 +99,14 @@ export function MissingFieldsPanel({
               <li key={m}>{MISSING_FIELD_LABELS[m]}</li>
             ))}
           </ul>
+
+          {advisories.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-amber-300/90">
+              {advisories.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ul>
+          )}
 
           {missing.includes("tech-specs") && (
             <div className="mt-3 rounded-md border border-divider bg-surface p-3">

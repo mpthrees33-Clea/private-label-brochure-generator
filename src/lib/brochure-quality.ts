@@ -1,4 +1,5 @@
 import type { BrochureData } from "./brochure-types";
+import { getSwatchLayout } from "./brochure-layout";
 
 // Quality gate: every brochure must have these fields populated before
 // the rep is allowed to save. The user has been explicit — half-baked
@@ -6,6 +7,12 @@ import type { BrochureData } from "./brochure-types";
 // preview, block Save until resolved.
 
 const MIN_TECH_SPECS = 4;
+
+// Below this rendered swatch width (px at 96 DPI) the color label and tile
+// face get too small to read. Reached only at extreme tile ratios (e.g. a
+// 2"x10" plank) combined with many colors. This is advisory ONLY — we keep
+// the true ratio and never block on it (the 2-page invariant still holds).
+const MIN_READABLE_SWATCH_W = 26;
 
 export type MissingField =
   | "description"
@@ -42,6 +49,24 @@ export function missingBrochureFields(data: BrochureData): MissingField[] {
     missing.push("tech-specs");
   }
   return missing;
+}
+
+// Non-blocking warnings. Unlike MissingField, these do NOT disable Save /
+// Download — they just nudge the rep that the result may look cramped, so
+// they can pick a different representative size or drop a color.
+export function brochureAdvisories(data: BrochureData): string[] {
+  const advisories: string[] = [];
+  const swatch = getSwatchLayout(data);
+  if (
+    data.colors.length > 0 &&
+    swatch.width > 0 &&
+    swatch.width < MIN_READABLE_SWATCH_W
+  ) {
+    advisories.push(
+      `The swatches are rendering narrow (${swatch.width}px) because this tile shape is tall and the collection has ${data.colors.length} colors. The brochure is still valid, but consider a wider representative size or fewer colors for legibility.`,
+    );
+  }
+  return advisories;
 }
 
 export const MISSING_FIELD_LABELS: Record<MissingField, string> = {

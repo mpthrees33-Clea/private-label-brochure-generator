@@ -31,6 +31,7 @@ export function scrapedToBrochure(
     finishLegend: p.finishLegend,
     footnotes: p.footnotes,
     techSpecs: p.techSpecs,
+    swatchAspect: p.swatchAspect,
   };
 }
 

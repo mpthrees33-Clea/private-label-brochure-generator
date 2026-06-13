@@ -20,6 +20,7 @@ CRITICAL — visual field map. The rep describes the brochure visually. Map thei
 - "footnotes", "the asterisk text", "the note under the chart" → \`footnotes\`.
 - "header", "title", "tagline", "name" → \`trinityName\` or \`trinityTagline\`.
 - "description", "body copy", "intro" → \`description\`.
+- "the swatches look stretched/squished/wrong shape", "these are 6x6 squares", "this is a 2x10 plank", "make the swatches square / wider / taller" → \`swatchAspect\` (the swatch box's height ÷ width). Square = 1, a 12"x24" portrait tile = 2, a 2:1 landscape wall tile = 0.5, a 2"x10" plank = 5. Compute it from the real tile shape the rep names (height in inches ÷ width in inches). Preserve the existing value when the rep isn't talking about swatch shape.
 
 NEVER touch \`finishLegend\` unless the rep specifically asks about the "legend" or the small bullets that say "matte" / "grip" / "textured" at the bottom of page 2. Words like "matte" and "grip" can also refer to availability — when in doubt, the rep means \`availability\`, not \`finishLegend\`.`;
 
@@ -75,6 +76,11 @@ const APPLY_EDIT_TOOL = {
       },
       finishLegend: { type: "array", items: { type: "string" } },
       footnotes: { type: "array", items: { type: "string" } },
+      swatchAspect: {
+        type: ["number", "null"],
+        description:
+          "Representative swatch box aspect = height / width. Square tile = 1, 12\"x24\" portrait = 2, 2:1 landscape = 0.5, 2\"x10\" plank = 5. Preserve the current value unless the rep is correcting the swatch shape.",
+      },
       techSpecs: {
         type: "object",
         properties: {
