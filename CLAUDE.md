@@ -91,7 +91,9 @@ We hit a hallucination incident on 2026-05-19: a PDF URL got parsed as HTML, the
 
 ## PDF rendering
 
-`src/lib/pdf/render.ts` launches Puppeteer (system Chromium on the VPS), navigates to an internal URL that renders the React `<Brochure>` (`/internal/brochure/[id]` for saved products, `/internal/brochure/preview` for the Kendall reference), then calls `page.pdf()`. **Asserts exactly 2 pages** — if the rendered HTML produces 1 or 3+ pages, it throws. The 2-page rule is non-negotiable per the distributor's print process.
+`src/lib/pdf/render.ts` launches Puppeteer (system Chromium on the VPS), navigates to an internal URL that renders the React `<Brochure>` (`/internal/brochure/[id]` for saved products, `/internal/brochure/preview` for the Kendall reference), then calls `page.pdf()`.
+
+**The renderer navigates over loopback (`http://127.0.0.1:$PORT`), not the public hostname.** nginx guards the site with HTTP Basic auth; the renderer has no session and cannot answer a password prompt, so a public-hostname navigation fails with `net::ERR_INVALID_AUTH_CREDENTIALS` (this was the "saved, but export failed" bug). Every brochure asset is a same-origin relative URL (`/api/proxy-image`, `/api/uploads/*`, `/brand/*`), so loopback resolves them all. `/api/brochure/pdf` hands the renderer a candidate list — loopback first, public origin as fallback — and a candidate that fails at the network/HTTP level falls through to the next. Content failures like the 2-page assertion do NOT fall through. **Asserts exactly 2 pages** — if the rendered HTML produces 1 or 3+ pages, it throws. The 2-page rule is non-negotiable per the distributor's print process.
 
 The brochure layout (`src/lib/brochure-layout.ts`) dynamically sizes swatches so the page-2 content fits regardless of color count. **Swatch aspect ratio must stay 1:2** (mimicking 12"×24" tiles); never distort, shrink proportionally.
 
@@ -167,4 +169,7 @@ Puppeteer needs a real Chromium binary. On Ubuntu: `apt install google-chrome-st
 | `NEXTAUTH_URL` | yes (in prod) | Cookie domain |
 | `PUPPETEER_EXECUTABLE_PATH` | yes (in prod) | Path to Chromium for PDF render |
 | `QFB_DATA_DIR` | optional | Override `/var/lib/qfb` data root |
+| `QFB_RENDER_ORIGIN` | optional | Origin the PDF renderer loads brochure pages from. Defaults to `http://127.0.0.1:$PORT` |
+| `QFB_RENDER_BASIC_AUTH_USER` | optional | Basic-auth user for the renderer, when it must traverse a protected proxy |
+| `QFB_RENDER_BASIC_AUTH_PASSWORD` | optional | Password paired with the above |
 | `NEXT_PUBLIC_GA_ID` | optional | Google Analytics measurement ID |

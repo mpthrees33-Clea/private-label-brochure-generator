@@ -105,6 +105,14 @@ matches the VPS's exact Node + glibc. Secrets live in
 `/var/www/quick-flip-brochures/.env.production` on the VPS and never
 ride through rsync.
 
+nginx fronts the app with HTTP Basic auth (realm "Trinity AI Team"). The
+PDF renderer must therefore **never** be pointed at the public hostname —
+it is a headless browser with no session and no way to answer a password
+prompt, so the navigation dies with `net::ERR_INVALID_AUTH_CREDENTIALS`.
+It renders over loopback (`http://127.0.0.1:$PORT`) instead, which skips
+nginx entirely. Set `QFB_RENDER_ORIGIN` if the app listens somewhere other
+than `127.0.0.1:$PORT`.
+
 ## Env vars
 
 | Name | Required | Purpose |
@@ -115,6 +123,9 @@ ride through rsync.
 | `NEXTAUTH_URL` | yes in prod | Cookie domain |
 | `PUPPETEER_EXECUTABLE_PATH` | yes in prod | Path to system Chromium for PDF render (e.g. `/usr/bin/google-chrome-stable`) |
 | `QFB_DATA_DIR` | optional | Override `/var/lib/qfb` data root |
+| `QFB_RENDER_ORIGIN` | optional | Origin the PDF renderer loads brochure pages from. Defaults to `http://127.0.0.1:$PORT` so it bypasses nginx/basic auth |
+| `QFB_RENDER_BASIC_AUTH_USER` | optional | Basic-auth user for the renderer, if it must go through a password-protected proxy |
+| `QFB_RENDER_BASIC_AUTH_PASSWORD` | optional | Password paired with the above |
 | `NEXT_PUBLIC_GA_ID` | optional | Google Analytics measurement ID |
 
 ## Project layout
