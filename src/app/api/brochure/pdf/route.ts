@@ -58,16 +58,10 @@ export async function GET(req: NextRequest) {
     filename = `${product.trinityName || source}.pdf`;
   }
 
-  const host = req.headers.get("host") ?? "localhost:3000";
-  const protocol = req.headers.get("x-forwarded-proto") ?? "https";
-  const origin =
-    process.env.VERCEL || host !== "localhost:3000"
-      ? `${protocol}://${host}`
-      : `http://${host}`;
-  const target = `${origin}${renderPath}`;
+  const targets = renderTargets(req, renderPath);
 
   try {
-    const pdfBytes = await renderBrochurePdf(target);
+    const pdfBytes = await renderBrochurePdf(targets);
     return new NextResponse(Buffer.from(pdfBytes), {
       status: 200,
       headers: {
@@ -88,6 +82,43 @@ export async function GET(req: NextRequest) {
       headers: { "Content-Type": "text/html; charset=utf-8" },
     });
   }
+}
+
+// URLs Puppeteer will try, in order.
+//
+// Loopback FIRST. On the VPS, nginx fronts the whole site with HTTP Basic
+// auth; the renderer is a headless browser with no session and no way to
+// answer a password prompt, so navigating to the public hostname dies with
+// net::ERR_INVALID_AUTH_CREDENTIALS. Chromium runs on the same box as the
+// Next server, so it can hit the app directly and skip the proxy (and TLS)
+// entirely. Every asset the brochure loads — /api/proxy-image,
+// /api/uploads/*, /brand/* — is a same-origin relative URL, so it resolves
+// against the loopback origin too.
+//
+// The public origin stays as a last-resort fallback for setups where the
+// renderer is not colocated with the web server.
+function renderTargets(req: NextRequest, renderPath: string): string[] {
+  const targets: string[] = [];
+
+  const override = process.env.QFB_RENDER_ORIGIN;
+  if (override) {
+    targets.push(`${override.replace(/\/+$/, "")}${renderPath}`);
+  } else if (!process.env.VERCEL) {
+    // Vercel functions are not the web server, so loopback goes nowhere.
+    targets.push(`http://127.0.0.1:${process.env.PORT || "3000"}${renderPath}`);
+  }
+
+  const host = req.headers.get("host");
+  if (host) {
+    const protocol =
+      req.headers.get("x-forwarded-proto") ??
+      (host.startsWith("localhost") || host.startsWith("127.0.0.1")
+        ? "http"
+        : "https");
+    targets.push(`${protocol}://${host}${renderPath}`);
+  }
+
+  return Array.from(new Set(targets));
 }
 
 function escapeHtml(s: string): string {
