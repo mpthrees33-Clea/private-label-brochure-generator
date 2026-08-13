@@ -1,34 +1,21 @@
-import type { BrochureColor } from "@/lib/brochure-types";
+import type { SwatchCell } from "@/lib/brochure-layout";
 import { proxyImageUrl } from "@/lib/image-proxy";
 
-// Tile swatches mimic a 12"x24" tile — aspect ratio MUST be 1:2.
-// Never alter the ratio. If horizontal space runs out, the layout
-// engine adds another primary row (see brochure-layout.computeSwatchLayout).
+// Swatch boxes default to the 1:2 portrait ratio of a 12"x24" field
+// tile; a color's `swatchAspect` overrides it (1 = square 12"x12"
+// mosaic sheet). Cell dimensions are computed by
+// brochure-layout.getSwatchLayout — never distort an image here.
 const SWATCH_GAP = 12;
 const ROW_GAP = 8;
 
-export function ColorSwatchGrid({
-  colors,
-  swatchWidth,
-  perRow,
-}: {
-  colors: BrochureColor[];
-  swatchWidth: number;
-  perRow: number;
-}) {
-  const hasDeco = colors.some((c) => c.decoImageUrl);
-  const chunks: BrochureColor[][] = [];
-  for (let i = 0; i < colors.length; i += perRow) {
-    chunks.push(colors.slice(i, i + perRow));
-  }
+export function ColorSwatchGrid({ rows }: { rows: SwatchCell[][] }) {
+  const hasDeco = rows.some((row) => row.some((c) => c.color.decoImageUrl));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: `${ROW_GAP}px` }}>
-      {chunks.map((row, idx) => (
+      {rows.map((row, idx) => (
         <div key={idx}>
-          <SwatchRow colors={row} swatchWidth={swatchWidth} />
-          {hasDeco && (
-            <SwatchRow colors={row} swatchWidth={swatchWidth} deco />
-          )}
+          <SwatchRow cells={row} />
+          {hasDeco && <SwatchRow cells={row} deco />}
         </div>
       ))}
     </div>
@@ -36,12 +23,10 @@ export function ColorSwatchGrid({
 }
 
 function SwatchRow({
-  colors,
-  swatchWidth,
+  cells,
   deco = false,
 }: {
-  colors: BrochureColor[];
-  swatchWidth: number;
+  cells: SwatchCell[];
   deco?: boolean;
 }) {
   return (
@@ -49,7 +34,7 @@ function SwatchRow({
       className={deco ? "mt-2 flex justify-center" : "flex justify-center"}
       style={{ gap: `${SWATCH_GAP}px` }}
     >
-      {colors.map((c) => {
+      {cells.map(({ color: c, width, height }) => {
         const src = deco ? c.decoImageUrl ?? undefined : c.imageUrl;
         const label = deco ? `${c.trinityName} deco` : c.trinityName;
         return (
@@ -58,8 +43,8 @@ function SwatchRow({
             className="flex flex-col"
           >
             <div
-              className="aspect-[1/2] overflow-hidden bg-[#f3f3f3]"
-              style={{ width: swatchWidth }}
+              className="overflow-hidden bg-[#f3f3f3]"
+              style={{ width, height }}
             >
               {src ? (
                 // eslint-disable-next-line @next/next/no-img-element

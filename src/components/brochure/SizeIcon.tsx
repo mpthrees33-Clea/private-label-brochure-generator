@@ -33,6 +33,36 @@ export function SizeIcon({ kind }: { kind: SizeIconKind }) {
           )}
         </svg>
       );
+    case "mosaic-penny":
+      // Penny-round sheet: staggered rows of circles.
+      return (
+        <svg viewBox="0 0 40 40" className="h-6 w-6" aria-hidden>
+          {[0, 1, 2, 3].map((r) =>
+            [0, 1, 2, 3].map((c) => {
+              const offset = r % 2 === 1 ? 5 : 0;
+              const cx = c * 10 + 5 + offset;
+              if (cx + 4.5 > 40) return null;
+              return (
+                <circle key={`${r}-${c}`} cx={cx} cy={r * 10 + 5} r="4.5"
+                  fill="none" stroke={STROKE} strokeWidth="0.75" />
+              );
+            }),
+          )}
+        </svg>
+      );
+    case "mosaic-stacked":
+      // Stacked / kit-kat sheet: two bands of tall thin sticks.
+      return (
+        <svg viewBox="0 0 40 40" className="h-6 w-6" aria-hidden>
+          {[0, 1].map((band) =>
+            [0, 1, 2, 3, 4, 5, 6].map((c) => (
+              <rect key={`${band}-${c}`} x={c * 5.5 + 1} y={band * 20 + 1}
+                width="4" height="18"
+                fill="none" stroke={STROKE} strokeWidth="0.75" />
+            )),
+          )}
+        </svg>
+      );
     case "bullnose":
       return (
         <svg viewBox="0 0 60 10" className="h-1.5 w-10" aria-hidden>

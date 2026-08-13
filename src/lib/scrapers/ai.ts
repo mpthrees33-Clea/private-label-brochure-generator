@@ -18,8 +18,17 @@ Rules:
   * "rectangle" → standard rectangular field tile (e.g. 12"x24", 24"x48")
   * "square" → 1:1 tile (e.g. 12"x12", 24"x24")
   * "plank" → narrow tall rectangle (e.g. 6"x24", 8"x48")
-  * "mosaic" → mesh sheet of small tiles
+  * "mosaic" → mesh sheet of small square tiles (e.g. 2"x2" squares mosaic)
+  * "mosaic-penny" → mesh sheet of penny-round dots
+  * "mosaic-stacked" → mesh sheet of stacked thin rectangles (kit-kat / stacked mosaic)
   * "bullnose" → long skinny trim piece (e.g. 3"x24" bullnose)
+- MULTI-FORMAT COLLECTIONS (typical for mosaic lines): when the page is a colors × formats grid — the same colors offered in several formats (e.g. squares / penny round / stacked mosaics), each variant with its own product photo — then:
+  * emit ONE color entry per color×format variant, named "<color> <format>" (e.g. "white penny round"), in format-major order (all colors of format 1, then all colors of format 2, ...);
+  * set "rowGroup" on every entry to its format name (identical string for every color in that format) so the brochure renders one swatch row per format;
+  * set "swatchAspect" from the NOMINAL sheet/tile size — 12"x12" sheet → 1, 12"x24" tile → 0.5 — never from the photo's crop;
+  * emit one size entry per format with the matching mosaic iconKind;
+  * in "availability", map each variant ONLY to its own format's size label.
+  Never set rowGroup or swatchAspect for an ordinary single-format field-tile collection.
 - "isDeco" is true for the decorative / textured variant of a standard size.
 - "availability" maps each color name → the size labels available in that color. If unsure, list every size for every color.
 - "techSpecs" values must be SHORT and stripped of commentary. Match the Trinity reference brevity exactly. Use the printed units, no extra words. Examples (these are the only patterns; copy them):
@@ -104,6 +113,16 @@ const TOOL_SCHEMA = {
               description:
                 "If a decorative-finish variant of this color exists on the same page, its image URL. Else null.",
             },
+            swatchAspect: {
+              type: ["number", "null"],
+              description:
+                'Swatch box width ÷ height, from the NOMINAL tile/sheet size. null/0.5 = portrait 12"x24" field tile (the default). 1 = square 12"x12" mosaic sheet. Set only when the swatch is clearly not a 1:2 portrait tile.',
+            },
+            rowGroup: {
+              type: ["string", "null"],
+              description:
+                'Format grouping for the brochure swatch grid. ONLY for multi-format collections (e.g. mosaics sold as squares / penny round / stacked): the format name, identical for every color in that format, so the brochure renders one swatch row per format. null for single-format collections.',
+            },
           },
           required: ["name", "imageUrl"],
         },
@@ -125,7 +144,15 @@ const TOOL_SCHEMA = {
             },
             iconKind: {
               type: "string",
-              enum: ["rectangle", "square", "plank", "mosaic", "bullnose"],
+              enum: [
+                "rectangle",
+                "square",
+                "plank",
+                "mosaic",
+                "mosaic-penny",
+                "mosaic-stacked",
+                "bullnose",
+              ],
             },
             isDeco: { type: ["boolean", "null"] },
             finishes: {
@@ -347,6 +374,8 @@ function buildScrapedProduct(
       name: c.name,
       imageUrl: c.imageUrl,
       decoImageUrl: c.decoImageUrl ?? undefined,
+      swatchAspect: normalizeSwatchAspect(c.swatchAspect),
+      rowGroup: c.rowGroup?.trim().toLowerCase() || undefined,
     })),
     sizes: (ext.sizes ?? []).map((s) => ({
       label: s.label,
@@ -378,6 +407,14 @@ const RESERVED_TRINITY_NAMES = new Set([
   "torrance",
 ]);
 
+// Clamp AI-provided swatch aspect to a sane range; drop the default
+// (0.5) so ordinary field-tile products stay on the legacy layout path.
+function normalizeSwatchAspect(a: number | null | undefined): number | undefined {
+  if (typeof a !== "number" || !Number.isFinite(a) || a <= 0) return undefined;
+  const clamped = Math.min(3, Math.max(0.25, a));
+  return clamped === 0.5 ? undefined : clamped;
+}
+
 function normalizeTrinityName(suggested: string | undefined, factoryName: string): string {
   const cleaned = (suggested ?? "")
     .toLowerCase()
@@ -400,7 +437,13 @@ interface ExtractedShape {
   suggestedTagline?: string;
   suggestedDescription?: string;
   heroImageUrl?: string;
-  colors?: { name: string; imageUrl: string; decoImageUrl?: string | null }[];
+  colors?: {
+    name: string;
+    imageUrl: string;
+    decoImageUrl?: string | null;
+    swatchAspect?: number | null;
+    rowGroup?: string | null;
+  }[];
   sizes?: {
     label: string;
     thickness?: string | null;

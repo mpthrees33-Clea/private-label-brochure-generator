@@ -16,6 +16,9 @@ CRITICAL — visual field map. The rep describes the brochure visually. Map thei
 - "size chart", "sizes chart", "availability matrix", "the chart", "the grid", "the dots", "the dots in the chart" → \`availability\` (a record mapping color name → list of size labels that color is offered in). Adding/removing dots means adding/removing entries from this object.
 - "the legend", "the matte/grip legend", "the bullets at the bottom of the size chart", "finish bullets" → \`finishLegend\` (typically just ["matte"] or ["matte", "textured"] or ["matte", "grip"]).
 - "the swatch row", "the swatches", "color tiles" → \`colors\` (and their \`trinityName\` / \`imageUrl\` fields).
+- "the swatches are stretched / cropped wrong / should be square", "make the swatches square" → \`colors[].swatchAspect\` (swatch box width ÷ height: 1 = square 12"x12" mosaic sheet, 0.5 or null = default portrait 12"x24" field tile). Set it from the NOMINAL tile/sheet size the rep describes.
+- "one row per format", "group the swatches by format/pattern", "3 rows like the factory site" → \`colors[].rowGroup\` (the format name, identical string for every color of that format — e.g. "squares", "penny round", "stacked") plus the ORDER of the colors array (rows follow first-appearance order of rowGroup values, format-major).
+- "the little size diagram", "the penny round icon", "the icon above the size chart" → \`sizes[].iconKind\` ("mosaic" = square-grid sheet, "mosaic-penny" = penny-round dots, "mosaic-stacked" = stacked kit-kat sticks).
 - "tech specs", "technical specifications", "the spec table" → \`techSpecs\`.
 - "footnotes", "the asterisk text", "the note under the chart" → \`footnotes\`.
 - "header", "title", "tagline", "name" → \`trinityName\` or \`trinityTagline\`.
@@ -42,6 +45,16 @@ const APPLY_EDIT_TOOL = {
             trinityName: { type: "string" },
             imageUrl: { type: "string" },
             decoImageUrl: { type: ["string", "null"] },
+            swatchAspect: {
+              type: ["number", "null"],
+              description:
+                'Swatch box width ÷ height. null/0.5 = default portrait 12"x24" field tile. 1 = square 12"x12" mosaic sheet. Always from the nominal tile/sheet size, never the photo crop.',
+            },
+            rowGroup: {
+              type: ["string", "null"],
+              description:
+                "Format grouping: identical string for every color of the same format (e.g. \"penny round\") renders one swatch row-band per format. null for single-format products.",
+            },
           },
           required: ["trinityName", "imageUrl"],
         },
@@ -55,7 +68,15 @@ const APPLY_EDIT_TOOL = {
             thickness: { type: ["string", "null"] },
             iconKind: {
               type: "string",
-              enum: ["rectangle", "square", "plank", "mosaic", "bullnose"],
+              enum: [
+                "rectangle",
+                "square",
+                "plank",
+                "mosaic",
+                "mosaic-penny",
+                "mosaic-stacked",
+                "bullnose",
+              ],
             },
             isDeco: { type: ["boolean", "null"] },
             footnoteRef: { type: ["string", "null"] },
@@ -95,6 +116,7 @@ const APPLY_EDIT_TOOL = {
           "One short generalizable rule, third-person present tense, e.g. 'Trim product descriptions to 2 short sentences focused on commercial use.'",
       },
     },
+    additionalProperties: false,
     required: [
       "trinityName",
       "trinityTagline",
@@ -148,9 +170,24 @@ ${instruction}`,
     throw new Error("Claude did not return an apply_edit tool call.");
   }
   const ext = tu.input as unknown as { changeSummary: string } & BrochureData;
-  const { changeSummary, ...rest } = ext;
+  // Explicit pick-list, never a spread: guarantees a stray key from the
+  // model (e.g. layoutOverrides) can't reach the store and clobber state
+  // the rep set elsewhere, like drag positions.
+  const data: BrochureData = {
+    trinityName: ext.trinityName,
+    trinityTagline: ext.trinityTagline,
+    description: ext.description,
+    heroImageUrl: ext.heroImageUrl,
+    colors: ext.colors,
+    sizes: ext.sizes,
+    availability: ext.availability,
+    finishLegend: ext.finishLegend,
+    footnotes: ext.footnotes,
+    techSpecs: ext.techSpecs,
+  };
   return {
-    data: rest as BrochureData,
-    changeSummary: changeSummary || "Updated brochure based on rep instruction.",
+    data,
+    changeSummary:
+      ext.changeSummary || "Updated brochure based on rep instruction.",
   };
 }

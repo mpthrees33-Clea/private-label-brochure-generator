@@ -279,6 +279,7 @@ export function SwatchImageEditor({
                 </div>
                 <SwatchRow
                   label="main swatch"
+                  aspect={c.swatchAspect ?? 0.5}
                   current={c.imageUrl}
                   draft={drafts[`${idx}:imageUrl`]}
                   busy={!!busy[`${idx}:imageUrl`]}
@@ -288,6 +289,7 @@ export function SwatchImageEditor({
                 />
                 <SwatchRow
                   label="deco / textured (optional)"
+                  aspect={c.swatchAspect ?? 0.5}
                   current={c.decoImageUrl ?? ""}
                   draft={drafts[`${idx}:decoImageUrl`]}
                   busy={!!busy[`${idx}:decoImageUrl`]}
@@ -387,9 +389,13 @@ function SwatchRow({
   onChange,
   onSave,
   onSaveValue,
+  aspect = 0.5,
 }: {
   label: string;
   current: string;
+  /** Swatch box width ÷ height for the thumbnail preview (matches the
+   *  brochure's swatchAspect; default 0.5 = portrait field tile). */
+  aspect?: number;
   // `undefined` ⇒ no edits in progress, show the saved URL as the
   // visible value so the rep can see which fields are populated.
   // `string` ⇒ the rep is actively editing; show what they typed.
@@ -468,7 +474,10 @@ function SwatchRow({
   return (
     <div className="mt-1.5">
       <div className="flex items-center gap-2">
-        <div className="h-10 w-5 shrink-0 overflow-hidden rounded-sm border border-divider bg-[#f3f3f3]">
+        <div
+          className="h-10 shrink-0 overflow-hidden rounded-sm border border-divider bg-[#f3f3f3]"
+          style={{ width: Math.round(40 * aspect) }}
+        >
           {hasCurrent ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img

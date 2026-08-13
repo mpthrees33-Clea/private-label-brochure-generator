@@ -26,17 +26,9 @@ import { FinishMarker } from "./FinishMarker";
 // override coord wins.
 const PAGE2_TOP = HEADER_H + 12;
 const SECTION_GAP = 8;
-const SWATCH_LABEL_H = 18;
-const SWATCH_ROW_GAP_BETWEEN_ROWS = 8;
 
-function defaultSizeMatrixY(data: BrochureData, swatch: SwatchLayout): number {
-  const hasDeco = data.colors.some((c) => c.decoImageUrl);
-  const visualRowsPerPrimary = hasDeco ? 2 : 1;
-  const visualRows = swatch.primaryRows * visualRowsPerPrimary;
-  const swatchH =
-    visualRows * (swatch.height + SWATCH_LABEL_H) +
-    Math.max(0, visualRows - 1) * SWATCH_ROW_GAP_BETWEEN_ROWS;
-  return PAGE2_TOP + swatchH + SECTION_GAP;
+function defaultSizeMatrixY(swatch: SwatchLayout): number {
+  return PAGE2_TOP + swatch.swatchBlockHeight + SECTION_GAP;
 }
 
 export function resolveBlockPosition(
@@ -45,7 +37,7 @@ export function resolveBlockPosition(
   swatch: SwatchLayout,
 ): BlockPosition & { width: number; page: 1 | 2 } {
   const defaults = BLOCK_DEFAULTS[id];
-  const dynamicY = id === "sizeMatrix" ? defaultSizeMatrixY(data, swatch) : defaults.y;
+  const dynamicY = id === "sizeMatrix" ? defaultSizeMatrixY(swatch) : defaults.y;
   const override = data.layoutOverrides?.[id];
   return {
     page: defaults.page,
@@ -132,11 +124,7 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
         tagline={data.trinityTagline}
       />
       <Block id="swatches" pos={swatchesPos}>
-        <ColorSwatchGrid
-          colors={data.colors}
-          swatchWidth={swatch.width}
-          perRow={swatch.perRow}
-        />
+        <ColorSwatchGrid rows={swatch.rows} />
       </Block>
       <Block id="sizeMatrix" pos={sizeMatrixPos}>
         <SizeMatrix

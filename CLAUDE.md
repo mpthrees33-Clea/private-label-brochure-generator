@@ -93,7 +93,7 @@ We hit a hallucination incident on 2026-05-19: a PDF URL got parsed as HTML, the
 
 `src/lib/pdf/render.ts` launches Puppeteer (system Chromium on the VPS), navigates to an internal URL that renders the React `<Brochure>` (`/internal/brochure/[id]` for saved products, `/internal/brochure/preview` for the Kendall reference), then calls `page.pdf()`. **Asserts exactly 2 pages** — if the rendered HTML produces 1 or 3+ pages, it throws. The 2-page rule is non-negotiable per the distributor's print process.
 
-The brochure layout (`src/lib/brochure-layout.ts`) dynamically sizes swatches so the page-2 content fits regardless of color count. **Swatch aspect ratio must stay 1:2** (mimicking 12"×24" tiles); never distort, shrink proportionally.
+The brochure layout (`src/lib/brochure-layout.ts`) dynamically sizes swatches so the page-2 content fits regardless of color count. **Swatch aspect ratio defaults to 1:2** (mimicking 12"×24" tiles); a color's optional `swatchAspect` overrides it (1 = square 12"×12" mosaic sheet) and `rowGroup` groups swatches into one row-band per format (mosaic collections: squares / penny round / stacked). Never distort an image — the layout engine computes each cell's box from its aspect; shrink proportionally.
 
 ## Quality gate
 

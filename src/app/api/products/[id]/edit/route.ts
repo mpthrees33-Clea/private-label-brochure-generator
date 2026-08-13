@@ -60,7 +60,7 @@ export async function POST(
         product,
         noop: true,
         changeSummary:
-          "No data changes applied. The chat edits brochure DATA (description, names, colors, sizes, tech specs) — not visual layout. Layout/positioning of swatches, headers, etc. is fixed by the renderer. Try rephrasing as a data change, or ask the engineer to adjust the template.",
+          "No data changes applied. The chat edits brochure DATA — description, names, colors, sizes, tech specs, plus swatch shape (swatchAspect: e.g. square mosaic sheets), swatch row grouping by format (rowGroup), and size-chart icons (squares / penny round / stacked mosaic). Block positioning is drag-only in the editor. Try rephrasing as one of those changes.",
       },
       { status: 200 },
     );

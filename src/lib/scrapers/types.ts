@@ -3,6 +3,8 @@ export type SizeIcon =
   | "square"
   | "plank"
   | "mosaic"
+  | "mosaic-penny"
+  | "mosaic-stacked"
   | "bullnose";
 
 export interface TechSpecs {
@@ -21,6 +23,14 @@ export interface ScrapedColor {
   name: string;
   imageUrl: string;
   decoImageUrl?: string;
+  /** Swatch box width ÷ height. Unset = 0.5 (portrait 12"x24" field
+   *  tile). 1 = square mosaic sheet (12"x12"). Derived from the nominal
+   *  sheet/tile size, not the photo's pixel dimensions. */
+  swatchAspect?: number;
+  /** Format grouping key for multi-format collections (e.g. "squares",
+   *  "penny round", "stacked"). Colors sharing a rowGroup render as one
+   *  swatch row-band per format on the brochure. */
+  rowGroup?: string;
 }
 
 export interface ScrapedSize {

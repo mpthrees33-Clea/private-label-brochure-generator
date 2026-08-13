@@ -1,4 +1,4 @@
-import type { BlockId, BrochureData } from "./brochure-types";
+import type { BlockId, BrochureColor, BrochureData } from "./brochure-types";
 
 // Letter at 96 DPI: 816 × 1056 px.
 export const PAGE_W = 816;
@@ -29,13 +29,32 @@ function estimateSizeMatrixHeight(colorCount: number): number {
   return MATRIX_HEADER_H + colorCount * MATRIX_ROW_H;
 }
 
-export interface SwatchLayout {
+/** Legacy summary of the uniform-grid layout (all swatches one size). */
+export interface SwatchSummary {
   width: number;
   height: number;
   /** Number of PRIMARY rows. If hasDeco, total visual rows = primaryRows * 2. */
   primaryRows: number;
   /** Colors per primary row (last row may have fewer). */
   perRow: number;
+}
+
+/** One rendered swatch cell: a color plus its computed box dimensions.
+ *  Cells in the same row share a height; widths follow each color's
+ *  swatchAspect (default 0.5 = portrait 12"x24" field tile). */
+export interface SwatchCell {
+  color: BrochureColor;
+  width: number;
+  height: number;
+}
+
+export interface SwatchLayout extends SwatchSummary {
+  /** Explicit primary rows of cells. If hasDeco, the renderer mirrors
+   *  each primary row with a deco row of the same dimensions. */
+  rows: SwatchCell[][];
+  /** Total rendered height of the swatch block including labels, row
+   *  gaps, and deco rows. Drives the default sizeMatrix y. */
+  swatchBlockHeight: number;
 }
 
 // Compute the swatch layout: how many primary rows to use and the
@@ -48,7 +67,7 @@ const MAX_PRIMARY_ROWS = 3;
 export function computeSwatchLayout(
   colorCount: number,
   hasDeco: boolean,
-): SwatchLayout {
+): SwatchSummary {
   if (colorCount <= 0) return { width: 0, height: 0, primaryRows: 1, perRow: 0 };
 
   const sectionGaps = 2; // swatches→matrix, matrix→footnotes
@@ -63,7 +82,7 @@ export function computeSwatchLayout(
     SAFETY_BUFFER;
   const availV = PAGE_H - fixedV;
 
-  let best: SwatchLayout = { width: 0, height: 0, primaryRows: 1, perRow: colorCount };
+  let best: SwatchSummary = { width: 0, height: 0, primaryRows: 1, perRow: colorCount };
 
   for (let primaryRows = 1; primaryRows <= MAX_PRIMARY_ROWS; primaryRows++) {
     const perRow = Math.ceil(colorCount / primaryRows);
@@ -88,9 +107,193 @@ export function computeSwatchLayout(
   return best;
 }
 
+const DEFAULT_SWATCH_ASPECT = 0.5;
+
+function effectiveAspect(c: BrochureColor): number {
+  const a = c.swatchAspect;
+  if (typeof a !== "number" || !Number.isFinite(a) || a <= 0) {
+    return DEFAULT_SWATCH_ASPECT;
+  }
+  return Math.min(3, Math.max(0.25, a));
+}
+
+/** Total rendered block height for a set of primary rows: every visual
+ *  row is image + label, with SWATCH_ROW_GAP between visual rows. Deco
+ *  doubles each primary row (mirrors ColorSwatchGrid's rendering). */
+function blockHeight(rowHeights: number[], hasDeco: boolean): number {
+  const perRowFactor = hasDeco ? 2 : 1;
+  const visualRows = rowHeights.length * perRowFactor;
+  if (visualRows === 0) return 0;
+  const images =
+    rowHeights.reduce((sum, h) => sum + h, 0) * perRowFactor;
+  return (
+    images + visualRows * SWATCH_LABEL_H + (visualRows - 1) * SWATCH_ROW_GAP
+  );
+}
+
+/** Chunk an array into k rows of ceil(n/k), last row possibly short. */
+function chunkRows<T>(items: T[], k: number): T[][] {
+  const perRow = Math.ceil(items.length / k);
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += perRow) {
+    out.push(items.slice(i, i + perRow));
+  }
+  return out;
+}
+
 export function getSwatchLayout(data: BrochureData): SwatchLayout {
   const hasDeco = data.colors.some((c) => c.decoImageUrl);
-  return computeSwatchLayout(data.colors.length, hasDeco);
+  const isLegacy =
+    data.colors.every((c) => !c.rowGroup) &&
+    data.colors.every(
+      (c) => c.swatchAspect == null || c.swatchAspect === DEFAULT_SWATCH_ASPECT,
+    );
+  if (isLegacy) {
+    // Legacy uniform grid — untouched math so every existing product
+    // renders pixel-identically.
+    const summary = computeSwatchLayout(data.colors.length, hasDeco);
+    const rows =
+      summary.perRow > 0
+        ? chunkRows(data.colors, Math.ceil(data.colors.length / summary.perRow))
+        : [];
+    const cellRows = rows.map((row) =>
+      row.map((color) => ({
+        color,
+        width: summary.width,
+        height: summary.height,
+      })),
+    );
+    // Replicate the historical defaultSizeMatrixY arithmetic exactly
+    // (it used primaryRows, and yields 18px even for zero colors).
+    const visualRows = summary.primaryRows * (hasDeco ? 2 : 1);
+    const legacyBlockH =
+      visualRows * (summary.height + SWATCH_LABEL_H) +
+      Math.max(0, visualRows - 1) * SWATCH_ROW_GAP;
+    return {
+      ...summary,
+      rows: cellRows,
+      swatchBlockHeight: legacyBlockH,
+    };
+  }
+  return computeGroupedSwatchLayout(data.colors, hasDeco);
+}
+
+/** Format-aware layout: colors are partitioned into ordered row-bands
+ *  by rowGroup (mosaic collections: one band per format), each cell's
+ *  width follows its color's swatchAspect, and we search for the row
+ *  split that yields the tallest swatches that still fit the page-2
+ *  vertical budget. */
+function computeGroupedSwatchLayout(
+  colors: BrochureColor[],
+  hasDeco: boolean,
+): SwatchLayout {
+  if (colors.length === 0) {
+    return {
+      width: 0, height: 0, primaryRows: 1, perRow: 0,
+      rows: [], swatchBlockHeight: 0,
+    };
+  }
+
+  // Partition into groups: distinct rowGroup values in first-appearance
+  // order; ungrouped colors form one trailing group.
+  const groupOrder: string[] = [];
+  const grouped = new Map<string, BrochureColor[]>();
+  const ungrouped: BrochureColor[] = [];
+  for (const c of colors) {
+    const g = c.rowGroup?.trim();
+    if (!g) {
+      ungrouped.push(c);
+      continue;
+    }
+    if (!grouped.has(g)) {
+      groupOrder.push(g);
+      grouped.set(g, []);
+    }
+    grouped.get(g)!.push(c);
+  }
+  const groups = groupOrder.map((g) => grouped.get(g)!);
+  if (ungrouped.length > 0) groups.push(ungrouped);
+
+  // Same vertical budget as the legacy path. Matrix rows scale with the
+  // number of color entries (variants), not groups.
+  const sectionGaps = 2;
+  const fixedV =
+    HEADER_H +
+    BODY_TOP_GAP +
+    SECTION_GAP * sectionGaps +
+    estimateSizeMatrixHeight(colors.length) +
+    FOOTNOTES_MAX_H +
+    BOTTOM_BLOCK_H +
+    SAFETY_BUFFER;
+  const availV = Math.max(0, PAGE_H - fixedV);
+
+  // Enumerate how many rows each group may span (1..3 each). Beyond 6
+  // groups the search space explodes — fall back to one row per group.
+  const splitChoices: number[][] =
+    groups.length > 6
+      ? [groups.map(() => 1)]
+      : cartesian(groups.map((g) => rowCountOptions(g.length)));
+
+  let best: { h: number; rows: BrochureColor[][] } | null = null;
+  for (const split of splitChoices) {
+    const rows = groups.flatMap((g, i) => chunkRows(g, split[i]));
+    const visualRows = rows.length * (hasDeco ? 2 : 1);
+    const vertMax = Math.floor(
+      (availV - visualRows * SWATCH_LABEL_H - (visualRows - 1) * SWATCH_ROW_GAP) /
+        visualRows,
+    );
+    let h = vertMax;
+    for (const row of rows) {
+      const aspectSum = row.reduce((sum, c) => sum + effectiveAspect(c), 0);
+      const horizMax = Math.floor(
+        (CONTENT_W - SWATCH_GAP_X * (row.length - 1)) / aspectSum,
+      );
+      h = Math.min(h, horizMax);
+    }
+    h = Math.max(0, h);
+    // Tallest swatches win; on ties prefer fewer rows.
+    if (!best || h > best.h || (h === best.h && rows.length < best.rows.length)) {
+      best = { h, rows };
+    }
+  }
+
+  const { h, rows } = best!;
+  if (h < 36) {
+    console.warn(
+      `[brochure-layout] grouped swatch height ${h}px is very small ` +
+        `(${colors.length} variants in ${groups.length} groups) — ` +
+        `the brochure may be illegible or overflow.`,
+    );
+  }
+  const cellRows = rows.map((row) =>
+    row.map((color) => ({
+      color,
+      width: Math.floor(h * effectiveAspect(color)),
+      height: h,
+    })),
+  );
+  const maxPerRow = Math.max(...rows.map((r) => r.length));
+  return {
+    // Legacy summary fields, kept for callers that only need a gist.
+    width: cellRows[0]?.[0]?.width ?? 0,
+    height: h,
+    primaryRows: rows.length,
+    perRow: maxPerRow,
+    rows: cellRows,
+    swatchBlockHeight: blockHeight(rows.map(() => h), hasDeco),
+  };
+}
+
+function rowCountOptions(groupSize: number): number[] {
+  const max = Math.min(MAX_PRIMARY_ROWS, groupSize);
+  return Array.from({ length: max }, (_, i) => i + 1);
+}
+
+function cartesian(options: number[][]): number[][] {
+  return options.reduce<number[][]>(
+    (acc, opts) => acc.flatMap((combo) => opts.map((o) => [...combo, o])),
+    [[]],
+  );
 }
 
 /** Default page-relative coords for every draggable block. Page is which

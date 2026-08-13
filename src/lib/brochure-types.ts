@@ -10,6 +10,15 @@ export interface BrochureColor {
   trinityName: string;
   imageUrl: string;
   decoImageUrl?: string | null;
+  /** Swatch box width ÷ height. Unset = 0.5 (the classic portrait
+   *  12"x24" field-tile swatch). 1 = square mosaic sheet (12"x12").
+   *  Always set from the nominal tile/sheet size, never the photo crop. */
+  swatchAspect?: number | null;
+  /** When set on any color, the swatch grid renders one row-band per
+   *  distinct rowGroup value, in first-appearance order — e.g. mosaic
+   *  collections get one row per format (squares / penny round /
+   *  stacked). Colors without a rowGroup form a trailing band. */
+  rowGroup?: string | null;
 }
 
 export interface BrochureSize {
