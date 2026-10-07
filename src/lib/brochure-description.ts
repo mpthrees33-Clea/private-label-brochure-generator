@@ -29,8 +29,16 @@ export function renderDescription(
   if (factoryName) {
     const trimmed = factoryName.trim();
     if (trimmed.length >= 3) {
+      // Replace a leaked product name ("Watercolor combines...") but
+      // leave a descriptive or color-prefix use ("watercolor look",
+      // "Watercolor Denim") alone. The {{name}} token is the real swap.
       const re = new RegExp(`\\b${escapeRegex(trimmed)}\\b`, "gi");
-      out = out.replace(re, name);
+      out = out.replace(re, (word, offset) => {
+        if (word[0] === word[0].toLowerCase()) return word;
+        const after = out.slice(offset + word.length);
+        if (/^\s+[A-Z]/.test(after)) return word;
+        return name;
+      });
     }
   }
   return out;

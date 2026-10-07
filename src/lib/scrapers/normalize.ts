@@ -27,6 +27,7 @@ export interface FinalizeContext {
 }
 
 const FINISH_ORDER = [
+  "semi-gloss",
   "glossy",
   "deep glaze",
   "silk",
@@ -81,8 +82,12 @@ export function finalizeScrapedProduct(
   applyThicknessNotes(next, sourceText);
   clearUnratedDcof(next, sourceText);
   applyWallFootnote(next, sourceText);
+  applyPrintedFinish(next, sourceText);
   if (pageHtml) applyPrintedFootnotes(next, pageHtml);
   dropNonColorLabels(next);
+  stripColorNoise(next);
+  dropOrphanDecoSwatches(next);
+  dedupeFootnotes(next);
   next.heroImageUrl = cleanImageUrl(next.heroImageUrl);
   if (catalog?.heroImageUrl && (!next.heroImageUrl || isJunkImage(next.heroImageUrl) || looksLikeSwatch(next.heroImageUrl))) {
     next.heroImageUrl = catalog.heroImageUrl;
@@ -510,14 +515,65 @@ function clearUnratedDcof(product: ScrapedProduct, sourceText: string): void {
   }
 }
 
+const WALL_ONLY_NOTE = /^\s*\*?\s*ceramic wall tile\s*[—–-]\s*not for floors\s*\.?\s*$/i;
+
+/** The canned wall-only line is kept only when the product itself is wall-only. */
+function sourceIsWallOnly(text: string): boolean {
+  const norm = text.replace(/\s+/g, " ");
+  const floorAndWall =
+    /floor\s*(?:&|and|\/|\+)\s*wall/i.test(norm) ||
+    /wall\s*(?:&|and|\/|\+)\s*floor/i.test(norm);
+  // A porcelain line badged for both floors and walls is not wall-only,
+  // even when the site nav also contains those words next to "ceramic wall".
+  const bothApplications =
+    /\bfloor\b/i.test(norm) &&
+    /\bwall\b/i.test(norm) &&
+    /porcelain|stoneware/i.test(norm) &&
+    !/ceramic wall/i.test(norm);
+  if (floorAndWall || bothApplications) return false;
+  return (
+    /ceramic wall tile/i.test(norm) ||
+    /\bceramic wall\b/i.test(norm) ||
+    /not (?:recommended |suitable )?for floors/i.test(norm) ||
+    /\b(?:walls?|backsplash) only\b/i.test(norm)
+  );
+}
+
 function applyWallFootnote(product: ScrapedProduct, sourceText: string): void {
-  const wallOnly =
-    /ceramic wall tile/i.test(sourceText) &&
-    !/floor\s*(&|and|\/)\s*wall/i.test(sourceText) &&
-    !/\bfloor tile\b/i.test(sourceText);
+  const wallOnly = sourceIsWallOnly(sourceText);
+  product.footnotes = product.footnotes.filter((note) => !WALL_ONLY_NOTE.test(note) || wallOnly);
   if (!wallOnly) return;
-  if (product.footnotes.some((f) => /wall|floor/i.test(f))) return;
+  if (product.footnotes.some((note) => WALL_ONLY_NOTE.test(note))) return;
   product.footnotes.push("*ceramic wall tile — not for floors");
+}
+
+/** A Finish row ("Finish Semi-Gloss") beats a glossy word in the marketing copy. */
+function applyPrintedFinish(product: ScrapedProduct, sourceText: string): void {
+  const printed = printedFinishes(sourceText);
+  if (printed.length === 0) return;
+  product.finishLegend = sortFinishes(printed);
+}
+
+function printedFinishes(text: string): string[] {
+  const found: string[] = [];
+  const label = /\bfinish\b\s*[:=]?\s*/gi;
+  let match: RegExpExecArray | null;
+  const token = /^(?:semi[-\s]?gloss|glossy|gloss|matte|matt|polished|silk|textured|natural|grip|honed|bright)\b/i;
+  while ((match = label.exec(text))) {
+    let rest = text.slice(match.index + match[0].length, match.index + match[0].length + 80);
+    let guard = 0;
+    while (guard < 6) {
+      guard += 1;
+      rest = rest.replace(/^\s+/, "");
+      const hit = rest.match(token);
+      if (!hit) break;
+      const canon = canonicalFinish(hit[0]);
+      if (canon && !found.includes(canon)) found.push(canon);
+      rest = rest.slice(hit[0].length);
+    }
+    if (found.length > 0) break;
+  }
+  return found;
 }
 
 function attachSwatchCards(product: ScrapedProduct, html: string): void {
@@ -604,10 +660,87 @@ function applyPrintedFootnotes(product: ScrapedProduct, html: string): void {
 }
 
 function notesOverlap(shorter: string, longer: string): boolean {
-  const a = shorter.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const b = longer.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const a = noteKey(shorter);
+  const b = noteKey(longer);
   if (!a || !b) return false;
-  return a === b || b.startsWith(a) || a.startsWith(b);
+  if (a === b || b.startsWith(a) || a.startsWith(b)) return true;
+  // A long installation note that already contains the TCNA sentence
+  // is the same footnote, not a second one.
+  if (a.length >= 24 && b.includes(a)) return true;
+  if (b.length >= 24 && a.includes(b)) return true;
+  return false;
+}
+
+function noteKey(note: string): string {
+  return note.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function dedupeFootnotes(product: ScrapedProduct): void {
+  const kept: string[] = [];
+  for (const note of product.footnotes) {
+    const text = note.trim();
+    if (!text) continue;
+    if (kept.some((existing) => notesOverlap(text, existing))) continue;
+    for (let i = kept.length - 1; i >= 0; i -= 1) {
+      if (notesOverlap(kept[i], text) && noteKey(text).length > noteKey(kept[i]).length) {
+        kept.splice(i, 1);
+      }
+    }
+    if (!kept.some((existing) => notesOverlap(text, existing))) kept.push(text);
+  }
+  product.footnotes = kept;
+}
+
+function stripColorNoise(product: ScrapedProduct): void {
+  const collection = (product.factoryName || "").trim();
+  const rename = (name: string): string => {
+    let next = name.replace(/\s+/g, " ").trim();
+    next = next.replace(/\s+bg$/i, "").trim();
+    if (collection.length >= 4) {
+      const escaped = collection.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const stripped = next.replace(new RegExp(`^${escaped}\\s+`, "i"), "").trim();
+      if (stripped.length >= 2) next = stripped;
+    }
+    return next || name.trim();
+  };
+  const seen = new Set<string>();
+  const colors: ScrapedColor[] = [];
+  for (const color of product.colors) {
+    const name = rename(color.name);
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    colors.push({ ...color, name });
+  }
+  product.colors = colors;
+
+  const rewrite = (record: Record<string, string[]> | undefined) => {
+    if (!record) return record;
+    const next: Record<string, string[]> = {};
+    for (const [key, value] of Object.entries(record)) {
+      const name = rename(key).toLowerCase();
+      next[name] = next[name] ? [...next[name], ...value] : value;
+    }
+    return next;
+  };
+  product.availability = rewrite(product.availability) ?? {};
+  if (product.availabilityFinishes) {
+    const next: Record<string, Record<string, string[]>> = {};
+    for (const [key, value] of Object.entries(product.availabilityFinishes)) {
+      next[rename(key).toLowerCase()] = value;
+    }
+    product.availabilityFinishes = next;
+  }
+}
+
+function dropOrphanDecoSwatches(product: ScrapedProduct): void {
+  const hasDecoSize = product.sizes.some(
+    (size) => Boolean(size.isDeco) || /\bdeco\b/i.test(size.label),
+  );
+  if (hasDecoSize) return;
+  for (const color of product.colors) {
+    if (color.decoImageUrl) delete color.decoImageUrl;
+  }
 }
 
 function namesMatch(colorName: string, caption: string): boolean {

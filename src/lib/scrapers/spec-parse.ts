@@ -186,6 +186,22 @@ function classRun(blob: string, label: RegExp): string | null {
   return `class ${tokens.join(" / ")}`;
 }
 
+/**
+ * When two sources print the same breaking strength, keep the one that
+ * includes the unit the factory printed (sell sheet "≥125 lbf" over a
+ * tech-sheet cell that only says "≥ 125"). Never invent a unit, and
+ * never replace a different number.
+ */
+export function upgradeMeasuredSpec(current: string, incoming: string): string {
+  const numberOf = (value: string) => value.match(/(\d+(?:\.\d+)?)/)?.[1];
+  const currentNumber = numberOf(current);
+  const incomingNumber = numberOf(incoming);
+  if (!currentNumber || currentNumber !== incomingNumber) return current;
+  const unitOf = (value: string) => value.match(/\b(lbf|lbs)\b/i)?.[1].toLowerCase();
+  if (!unitOf(current) && unitOf(incoming)) return incoming.trim();
+  return current;
+}
+
 /** Drop a model-written spec unless its number or word is in the source. */
 export function groundTechSpecs(
   specs: Partial<TechSpecs>,
@@ -454,7 +470,12 @@ function valueFor(key: keyof TechSpecs, text: string, label = ""): string | null
     );
     const match = matches[matches.length - 1];
     if (!match) return null;
-    const unit = match[3] ? ` ${match[3].toLowerCase()}` : /\blbf\b/i.test(hinted) ? " lbf" : "";
+    const hintedUnit = hinted.match(/\b(lbf|lbs)\b/i);
+    const unit = match[3]
+      ? ` ${match[3].toLowerCase()}`
+      : hintedUnit
+        ? ` ${hintedUnit[1].toLowerCase()}`
+        : "";
     return `≥ ${match[2]}${unit}`;
   }
   if (key === "scratchHardness") {

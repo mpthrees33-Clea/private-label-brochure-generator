@@ -13,6 +13,7 @@ import { NameEditor } from "./NameEditor";
 import { MissingFieldsPanel } from "./MissingFieldsPanel";
 import { SwatchImageEditor } from "./SwatchImageEditor";
 import { HeroImageEditor } from "./HeroImageEditor";
+import { brochurePdfFilename } from "@/lib/pdf/filename";
 
 export const dynamic = "force-dynamic";
 
@@ -83,14 +84,14 @@ export default async function ProductDetailPage({
             Edit fields
           </Link>
           {canDownload ? (
-            <Link
+            <a
               href={`/api/brochure/pdf?source=${product.id}`}
-              target="_blank"
+              download={brochurePdfFilename(product.trinityName, product.id)}
               className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white shadow-glow-accent transition hover:bg-accent-light"
             >
               <Download className="mr-1 inline h-4 w-4" />
               Download PDF
-            </Link>
+            </a>
           ) : (
             <button
               type="button"

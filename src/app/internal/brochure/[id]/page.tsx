@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Brochure } from "@/components/brochure/Brochure";
 import { getProduct } from "@/lib/store/products";
 import { withFactoryLayoutDefaults } from "@/lib/store/factory-layout-defaults";
+import { brochurePdfFilename } from "@/lib/pdf/filename";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -31,13 +32,13 @@ export default async function SavedBrochurePage({
         >
           ← Back to product
         </Link>
-        <Link
+        <a
           href={`/api/brochure/pdf?source=${product.id}`}
-          target="_blank"
+          download={brochurePdfFilename(product.trinityName, product.id)}
           className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-white shadow-glow-accent transition hover:bg-accent-light"
         >
           Download PDF
-        </Link>
+        </a>
       </div>
       <Brochure data={productWithDefaults} factoryName={product.factoryName} />
     </>

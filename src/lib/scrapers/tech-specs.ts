@@ -6,6 +6,7 @@ import {
   parseTechSpecItemsDetailed,
   parseTechSpecsDetailed,
   groundTechSpecs,
+  upgradeMeasuredSpec,
   type ParsedSpecRecord,
   type SpecTextItem,
 } from "./spec-parse";
@@ -217,7 +218,11 @@ export async function enrichTechSpecs(
   let fetched = 0;
   let merged = initial;
 
-  while (queue.length > 0 && fetched < 6 && nonNullSpecCount(merged) < 6) {
+  while (
+    queue.length > 0 &&
+    fetched < 6 &&
+    (nonNullSpecCount(merged) < 6 || missingBreakingUnit(merged))
+  ) {
     const url = queue.shift()!;
     fetched += 1;
     try {
@@ -229,9 +234,17 @@ export async function enrichTechSpecs(
         const bytes = await res.arrayBuffer();
         if (bytes.byteLength === 0 || bytes.byteLength > MAX_PDF_BYTES) continue;
         const parsed = await specsFromPdf(bytes);
+        const previousBreaking = pdfSpecs.breakingStrength;
         pdfSpecs = fillEmpty(pdfSpecs, parsed.specs);
         fillRecord(standards, parsed.standards, parsed.specs);
         stampSource(parsed.specs, sources, url, pdfSpecs);
+        if (
+          pdfSpecs.breakingStrength &&
+          pdfSpecs.breakingStrength !== previousBreaking &&
+          parsed.specs.breakingStrength === pdfSpecs.breakingStrength
+        ) {
+          sources.breakingStrength = url;
+        }
         merged = fillEmpty(initial, pdfSpecs);
         continue;
       }
@@ -372,11 +385,26 @@ function pdfLinks(html: string, pageUrl: string, token: string): string[] {
   return out.slice(0, 2);
 }
 
+function missingBreakingUnit(specs: Partial<TechSpecs>): boolean {
+  const value = specs.breakingStrength;
+  if (!value) return false;
+  return !/\b(lbf|lbs)\b/i.test(value);
+}
+
 function fillEmpty(base: Partial<TechSpecs>, next: Partial<TechSpecs>): Partial<TechSpecs> {
   const out: Partial<TechSpecs> = { ...base };
   for (const [key, value] of Object.entries(next)) {
     if (value == null || String(value).trim() === "") continue;
-    if (!out[key as keyof TechSpecs]) (out as Record<string, string>)[key] = value;
+    const specKey = key as keyof TechSpecs;
+    const prev = out[specKey];
+    if (!prev) {
+      (out as Record<string, string>)[key] = value;
+      continue;
+    }
+    if (specKey === "breakingStrength") {
+      const upgraded = upgradeMeasuredSpec(String(prev), String(value));
+      if (upgraded !== prev) (out as Record<string, string>)[key] = upgraded;
+    }
   }
   return out;
 }
