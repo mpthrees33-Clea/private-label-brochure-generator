@@ -24,6 +24,26 @@ describe("compressForPrint", () => {
     assert.equal(JPEG_QUALITY, 85);
   });
 
+  it("transcodes a webp photo to a jpeg larger than 1x1", async () => {
+    const source = await sharp({
+      create: {
+        width: 900,
+        height: 1600,
+        channels: 3,
+        background: { r: 180, g: 170, b: 160 },
+      },
+    })
+      .webp()
+      .toBuffer();
+    const out = await compressForPrint(source, { width: 80, height: 160, fit: "cover" });
+    const meta = await sharp(out.bytes).metadata();
+    assert.equal(out.contentType, "image/jpeg");
+    assert.ok((meta.width ?? 0) > 1);
+    assert.ok((meta.height ?? 0) > 1);
+    assert.equal(meta.width, 160);
+    assert.equal(meta.height, 320);
+  });
+
   it("keeps a transparent logo as PNG and does not enlarge it", async () => {
     const source = await sharp({
       create: {

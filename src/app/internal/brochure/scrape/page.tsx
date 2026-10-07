@@ -14,9 +14,9 @@ export const maxDuration = 60;
 export default async function ScrapeRenderPage({
   searchParams,
 }: {
-  searchParams: { url?: string };
+  searchParams: Promise<{ url?: string }>;
 }) {
-  const url = searchParams.url;
+  const { url } = await searchParams;
   if (!url) {
     return (
       <main className="mx-auto max-w-xl px-6 py-10 text-fg">

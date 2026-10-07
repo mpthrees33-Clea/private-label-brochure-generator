@@ -50,13 +50,17 @@ export async function GET() {
     }
   }
 
-  const buf = await wb.xlsx.writeBuffer();
+  const raw = await wb.xlsx.writeBuffer();
+  // ExcelJS returns a Node Buffer. Copy it into a sized Uint8Array so
+  // the body and Content-Length match the file bytes.
+  const body = new Uint8Array(raw);
   const filename = `quick-flip-crossover-${new Date().toISOString().slice(0, 10)}.xlsx`;
-  return new NextResponse(buf, {
+  return new NextResponse(body, {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": String(body.byteLength),
       "Cache-Control": "private, no-store",
     },
   });

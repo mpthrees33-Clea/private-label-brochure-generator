@@ -12,9 +12,10 @@ export const dynamic = "force-dynamic";
 // edit to the brochure and persist a Lesson for future scrapes.
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const product = await getProduct(params.id);
+  const { id } = await params;
+  const product = await getProduct(id);
   if (!product) {
     return NextResponse.json({ error: "Product not found" }, { status: 404 });
   }
@@ -66,7 +67,7 @@ export async function POST(
     );
   }
 
-  const updated = await updateProduct(params.id, result.data);
+  const updated = await updateProduct(id, result.data);
 
   await createLesson({
     productId: product.id,

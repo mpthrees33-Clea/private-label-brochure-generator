@@ -1,6 +1,16 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../../../tailwind.config.ts";
+
+/* v3 used gray-200 as the default border color. v4 uses currentColor. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
 
 /* Self-contained brochure stylesheet for headless PDF rendering.
    The screen app loads this same Tailwind build through Next; the PDF

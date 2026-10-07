@@ -14,7 +14,7 @@ const tmpCss = join(tmpdir(), "qfb-brochure-print.css");
 
 execFileSync(
   "npx",
-  ["tailwindcss", "-i", entry, "-o", tmpCss, "--minify"],
+  ["@tailwindcss/cli", "-i", entry, "-o", tmpCss, "--minify"],
   { cwd: root, stdio: "inherit" },
 );
 

@@ -61,16 +61,29 @@ export async function compressForPrint(
   if (keepPng) {
     const out = await pipeline.png({ compressionLevel: 9 }).toBuffer();
     if (!resize && out.length >= bytes.length) {
-      return { bytes, contentType: "image/png" };
+      return assertPrintable({ bytes, contentType: "image/png" });
     }
-    return { bytes: out, contentType: "image/png" };
+    return assertPrintable({ bytes: out, contentType: "image/png" });
   }
 
   const out = await pipeline.jpeg({ quality: JPEG_QUALITY, mozjpeg: true }).toBuffer();
   if (!resize && meta.format === "jpeg" && out.length >= bytes.length) {
-    return { bytes, contentType: "image/jpeg" };
+    return assertPrintable({ bytes, contentType: "image/jpeg" });
   }
-  return { bytes: out, contentType: "image/jpeg" };
+  return assertPrintable({ bytes: out, contentType: "image/jpeg" });
+}
+
+async function assertPrintable(file: {
+  bytes: Buffer;
+  contentType: string;
+}): Promise<{ bytes: Buffer; contentType: string }> {
+  const meta = await sharp(file.bytes, { failOn: "none" }).metadata();
+  const width = meta.width ?? 0;
+  const height = meta.height ?? 0;
+  if (width <= 1 || height <= 1) {
+    throw new Error(`print compress produced a ${width}x${height} image`);
+  }
+  return file;
 }
 
 function contentTypeFrom(format: string | undefined): string {

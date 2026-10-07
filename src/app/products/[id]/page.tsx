@@ -24,9 +24,10 @@ export const dynamic = "force-dynamic";
 export default async function ProductDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const product = await getProduct(params.id);
+  const { id } = await params;
+  const product = await getProduct(id);
   if (!product) notFound();
   const lessons = await listLessonsForProduct(product.id);
   const missing = missingBrochureFields(product);

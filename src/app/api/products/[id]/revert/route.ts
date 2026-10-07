@@ -14,20 +14,21 @@ export const dynamic = "force-dynamic";
 // store so the AI doesn't continue learning from a reverted instruction.
 export async function POST(
   _req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const product = await getProduct(params.id);
+  const { id } = await params;
+  const product = await getProduct(id);
   if (!product) {
     return NextResponse.json({ error: "Product not found" }, { status: 404 });
   }
-  const lesson = await getLatestLessonForProduct(params.id);
+  const lesson = await getLatestLessonForProduct(id);
   if (!lesson) {
     return NextResponse.json(
       { error: "No edits to undo." },
       { status: 404 },
     );
   }
-  const restored = await updateProduct(params.id, lesson.before);
+  const restored = await updateProduct(id, lesson.before);
   await deleteLesson(lesson.id);
   return NextResponse.json({
     product: restored,

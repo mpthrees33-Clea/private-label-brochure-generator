@@ -25,9 +25,10 @@ export const dynamic = "force-dynamic";
 // already been persisted by the PATCH that ran first.
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const product = await getProduct(params.id);
+  const { id } = await params;
+  const product = await getProduct(id);
   if (!product) {
     return NextResponse.json({ error: "Product not found" }, { status: 404 });
   }

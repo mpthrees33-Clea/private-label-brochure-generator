@@ -1,15 +1,14 @@
 import { readFile } from "fs/promises";
 import path from "path";
-import { fetchRemoteImage } from "@/lib/image-fetch";
+import sharp from "sharp";
+import { fetchRemoteImage, isDeniedImageHost } from "@/lib/image-fetch";
 import { sniffImageMime } from "@/lib/image-sniff";
 import { compressForPrint, type PrintSize } from "@/lib/pdf/print-image";
 import { readUpload } from "@/lib/store/uploads";
 
-// 1×1 transparent gif. Used when an image cannot be inlined so Chromium
-// does not try to fetch the app (auth, deployment protection, or no
-// listener on 127.0.0.1).
-const TRANSPARENT_GIF =
-  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+// The old fallback was this 1×1 transparent GIF. Chromium then printed
+// empty gray boxes and pdfimages reported a 1×1 image plus a 1×1 mask.
+const BLANK_GIF_PREFIX = "data:image/gif;base64,R0lGODlhAQAB";
 
 interface ImgRef {
   src: string;
@@ -30,7 +29,22 @@ export async function inlineBrochureImages(html: string): Promise<string> {
   await Promise.all(
     [...bySrc.entries()].map(async ([src, size]) => {
       if (!src || src.startsWith("data:")) return;
-      replacements.set(src, (await imageSrcToDataUri(src, size)) ?? TRANSPARENT_GIF);
+      const inlined = await imageSrcToDataUri(src, size);
+      if (inlined) {
+        replacements.set(src, inlined);
+        return;
+      }
+      // Inlining failed. Leave a public factory URL so Chromium can fetch
+      // it while printing. Never substitute a 1×1 GIF. App-relative and
+      // private URLs stay empty so the render step can refuse the PDF.
+      const remote = publicRemoteUrl(src);
+      if (remote) {
+        console.error(`brochure image will be fetched in-page: ${remote.slice(0, 200)}`);
+        replacements.set(src, remote);
+      } else {
+        console.error(`brochure image could not be inlined: ${src.slice(0, 200)}`);
+        replacements.set(src, "");
+      }
     }),
   );
 
@@ -71,11 +85,95 @@ function boxArea(size: PrintSize): number {
 }
 
 async function imageSrcToDataUri(src: string, size: PrintSize): Promise<string | null> {
+  let lastError = "no image";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const file = await loadImage(src);
+      if (!file) {
+        lastError = "fetch returned no image";
+        break;
+      }
+      const compressed = await compressForPrint(file.bytes, size).catch((err: unknown) => {
+        lastError = err instanceof Error ? err.message : String(err);
+        console.error(`brochure image compress failed: ${lastError} src=${src.slice(0, 160)}`);
+        return null;
+      });
+      const chosen = (await usablePrintFile(compressed)) ? compressed : (await usablePrintFile(file)) ? file : null;
+      const uri = bufferToDataUri(chosen);
+      if (uri && !uri.startsWith(BLANK_GIF_PREFIX)) return uri;
+      lastError = lastError || "image decoded as blank";
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+  }
+  console.error(`brochure image inline failed: ${lastError} src=${src.slice(0, 200)}`);
+  return null;
+}
+
+async function usablePrintFile(
+  file: { bytes: Buffer; contentType: string } | null,
+): Promise<boolean> {
+  if (!file || file.bytes.length < 32) return false;
+  if (file.bytes[0] === 0x47 && file.bytes[1] === 0x49 && file.bytes[2] === 0x46 && file.bytes.length < 64) {
+    return false;
+  }
   try {
-    const file = await loadImage(src);
-    if (!file) return null;
-    const compressed = await compressForPrint(file.bytes, size).catch(() => null);
-    return bufferToDataUri(compressed ?? file);
+    const meta = await sharp(file.bytes, { failOn: "none" }).metadata();
+    return (meta.width ?? 0) > 1 && (meta.height ?? 0) > 1;
+  } catch (err) {
+    console.error(
+      `brochure image metadata failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    const sniffed = sniffImageMime(new Uint8Array(file.bytes));
+    return sniffed === "image/jpeg" || sniffed === "image/png" || sniffed === "image/webp";
+  }
+}
+
+/** Data-URI images that would print as empty slots. Remote URLs are checked later, in Chromium. */
+export async function findBlankInlinedImages(html: string): Promise<string[]> {
+  const blanks: string[] = [];
+  for (const image of parseImages(html)) {
+    const src = image.src;
+    if (!src || src.startsWith(BLANK_GIF_PREFIX)) {
+      blanks.push(src ? "1x1 placeholder" : "empty image");
+      continue;
+    }
+    if (!src.startsWith("data:")) continue;
+    const bytes = dataUriBytes(src);
+    if (!bytes || bytes.length < 32) {
+      blanks.push("blank data image");
+      continue;
+    }
+    try {
+      const meta = await sharp(bytes, { failOn: "none" }).metadata();
+      if ((meta.width ?? 0) <= 1 || (meta.height ?? 0) <= 1) {
+        blanks.push(`${meta.width ?? 0}x${meta.height ?? 0} image`);
+      }
+    } catch {
+      blanks.push("undecodable image");
+    }
+  }
+  return blanks;
+}
+
+function dataUriBytes(src: string): Buffer | null {
+  const match = /^data:image\/[a-z0-9.+-]+;base64,([a-z0-9+/=\s]+)$/i.exec(src);
+  if (!match) return null;
+  return Buffer.from(match[1], "base64");
+}
+
+function publicRemoteUrl(src: string): string | null {
+  const remote = src.startsWith("/api/proxy-image")
+    ? new URL(src, "http://brochure.local").searchParams.get("url")
+    : /^https?:\/\//i.test(src)
+      ? src
+      : null;
+  if (!remote) return null;
+  try {
+    const parsed = new URL(remote);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    if (isDeniedImageHost(parsed.hostname)) return null;
+    return parsed.toString();
   } catch {
     return null;
   }

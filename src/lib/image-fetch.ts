@@ -1,11 +1,17 @@
 // Server-side image fetch shared by the browser proxy and the PDF
 // renderer. Factory CDNs often block hotlinking, so both paths fetch
-// with a browser-like User-Agent and retry once without a Referer.
+// with a browser-like User-Agent and retry without a Referer.
+//
+// Use undici directly. Next replaces global fetch, and that wrapper is
+// a poor fit for large binary CDN responses. An empty or failed fetch
+// used to be swapped for a 1×1 GIF in the brochure PDF.
+
+import { fetch as undiciFetch } from "undici";
 
 const SSRF_HOST_DENYLIST =
   /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|::1$)/i;
 
-const IMAGE_UA =
+export const IMAGE_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 export function isDeniedImageHost(hostname: string): boolean {
@@ -28,30 +34,48 @@ export async function fetchRemoteImage(
     {
       "User-Agent": IMAGE_UA,
       Referer: parsed.origin + "/",
-      Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+      Accept: "image/jpeg,image/png,image/webp,image/*;q=0.8,*/*;q=0.5",
     },
     {
       "User-Agent": IMAGE_UA,
-      Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+      Accept: "image/jpeg,image/png,image/webp,image/*;q=0.8,*/*;q=0.5",
+    },
+    {
+      "User-Agent": IMAGE_UA,
+      Referer: parsed.origin + "/",
+      Accept: "image/jpeg,image/png,image/webp,image/*;q=0.8,*/*;q=0.5",
     },
   ];
-  for (const headers of attempts) {
+  let lastStatus = 0;
+  let lastError = "";
+  for (let i = 0; i < attempts.length; i++) {
+    if (i > 0) await new Promise((resolve) => setTimeout(resolve, 200));
     try {
-      const upstream = await fetch(parsed.toString(), {
-        headers,
+      const upstream = await undiciFetch(parsed.toString(), {
+        headers: attempts[i],
         redirect: "follow",
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(15000),
       });
-      if (!upstream.ok) continue;
+      lastStatus = upstream.status;
+      if (!upstream.ok) {
+        await upstream.body?.cancel().catch(() => {});
+        continue;
+      }
       const bytes = Buffer.from(await upstream.arrayBuffer());
-      if (bytes.byteLength === 0) continue;
+      if (bytes.byteLength === 0) {
+        lastError = "empty body";
+        continue;
+      }
       return {
         bytes,
         contentType: upstream.headers.get("content-type") ?? "",
       };
-    } catch {
-      // try the next header set
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
     }
   }
+  console.error(
+    `image fetch failed host=${parsed.hostname} status=${lastStatus} error=${lastError || "no image"} url=${parsed.toString().slice(0, 240)}`,
+  );
   return null;
 }
