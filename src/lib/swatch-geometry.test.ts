@@ -117,6 +117,33 @@ describe("nominal size to frame ratio", () => {
     assert.equal(faces[1].ratio, 1);
   });
 
+  it("uses a trapezoid mosaic's 12x12 sheet as its nominal size", () => {
+    const faces = resolveSwatchFaces(
+      {
+        trinityName: "alabaster",
+        imageUrl: "https://cdn.example/4x4.jpg",
+        faces: [
+          { imageUrl: "https://cdn.example/4x4.jpg", widthIn: 4, heightIn: 4, aspectRatio: 1 },
+          {
+            imageUrl: "https://style-access.com/Alabaster-Trapesoid-Large.jpeg",
+            sizeUnknown: true,
+            aspectRatio: null,
+          },
+        ],
+      },
+      [
+        { label: '4"x4"', iconKind: "square" },
+        { label: "trapezoid mosaic", iconKind: "mosaic", sheetLabel: '12"x12"' },
+      ],
+    );
+    assert.equal(faces[1].sizeUnknown, false);
+    assert.equal(faces[1].widthIn, 12);
+    assert.equal(faces[1].heightIn, 12);
+    assert.equal(faces[1].ratio, 1);
+    assert.equal(faces[1].keepOutline, true);
+    assert.equal(faces[0].widthIn, 4);
+  });
+
   it("uses a listed 4x4 when the color has no stored face", () => {
     const faces = resolveSwatchFaces(
       { trinityName: "zelton", imageUrl: "" },

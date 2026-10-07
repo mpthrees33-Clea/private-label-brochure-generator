@@ -723,6 +723,34 @@ describe("trims and shared mosaics", () => {
     assert.match(product.footnotes[0], /please reference tcna for more information/i);
   });
 
+  it("reads a finish glued to the spec label and a glossy finish phrase", () => {
+    const atlas = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Atlas",
+        finishLegend: ["matte"],
+        colors: [{ name: "Alabaster", imageUrl: "https://cdn.example/alabaster.jpg" }],
+      }),
+      {
+        pageTitle: "Atlas",
+        sourceText: "soft variation, glossy depth, and handcrafted character. CeramicFinishSemi-Gloss Semi-GlossEdge",
+      },
+    );
+    assert.deepEqual(atlas.finishLegend, ["semi-gloss"]);
+
+    const watercolor = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Watercolor",
+        finishLegend: ["matte"],
+        colors: [{ name: "Denim", imageUrl: "https://cdn.example/denim.jpg" }],
+      }),
+      {
+        pageTitle: "Watercolor",
+        sourceText: "The format is 4 x 16, and it has a glossy finish, adding a touch of modernity.",
+      },
+    );
+    assert.deepEqual(watercolor.finishLegend, ["glossy"]);
+  });
+
   it("does not show a deco swatch when the deco is only a special piece", () => {
     const html = `<p>30x30 cm 12" x 12" Deco</p>`;
     const product = finalizeScrapedProduct(

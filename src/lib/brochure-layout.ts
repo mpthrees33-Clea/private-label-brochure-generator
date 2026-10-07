@@ -234,7 +234,19 @@ export function computeSwatchLayout(
     const readable = fitted.filter((layout) => layout.minShort >= MIN_SHORT_PX);
     const poolSource = readable.length > 0 ? readable : fitted.length > 0 ? fitted : candidates;
     const tight = poolSource.filter((layout) => voidBelow(layout) <= MAX_VOID_ABOVE_SPECS);
-    const pool = tight.length > 0 ? tight : poolSource;
+    // Nine upright 4×16 tiles meet the width floor in one row and then
+    // leave a hole above the specs. A second row is narrower than
+    // MIN_SWATCH_W but still readable, and it closes that hole.
+    const compact =
+      tight.length > 0
+        ? []
+        : candidates.filter(
+            (layout) =>
+              layout.minShort >= MIN_SHORT_PX &&
+              voidBelow(layout) >= 8 &&
+              voidBelow(layout) <= MAX_VOID_ABOVE_SPECS,
+          );
+    const pool = tight.length > 0 ? tight : compact.length > 0 ? compact : poolSource;
     pool.sort((a, b) => b.scale - a.scale || a.primaryRows - b.primaryRows);
     const chosen = pool[0];
     return {

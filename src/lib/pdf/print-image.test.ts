@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import sharp from "sharp";
+import { trimNearWhite } from "../image-trim";
 import { compressForPrint, JPEG_QUALITY } from "./print-image";
 
 describe("compressForPrint", () => {
@@ -78,6 +79,38 @@ describe("compressForPrint", () => {
     const pixel = await sharp(out.bytes).raw().toBuffer();
     const mid = Math.floor(pixel.length / 2);
     assert.ok(pixel[mid] < 250, `trimmed plank stayed white (${pixel[mid]})`);
+  });
+
+  it("clears white bays around an irregular sheet without eating the tile", async () => {
+    const width = 80;
+    const height = 80;
+    const raw = Buffer.alloc(width * height * 3, 255);
+    const put = (x: number, y: number, r: number, g: number, b: number) => {
+      const offset = (y * width + x) * 3;
+      raw[offset] = r;
+      raw[offset + 1] = g;
+      raw[offset + 2] = b;
+    };
+    for (let y = 16; y < 36; y++) {
+      for (let x = 16; x < 64; x++) put(x, y, 90, 80, 70);
+    }
+    for (let y = 36; y < 64; y++) {
+      for (let x = 36; x < 64; x++) put(x, y, 90, 80, 70);
+    }
+    const source = await sharp(raw, { raw: { width, height, channels: 3 } }).jpeg().toBuffer();
+    const trimmed = await trimNearWhite(source);
+    const meta = await sharp(trimmed.bytes).metadata();
+    assert.equal(meta.format, "png");
+    assert.equal(meta.hasAlpha, true);
+    const pixels = await sharp(trimmed.bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    let transparent = 0;
+    let tile = 0;
+    for (let i = 0; i < pixels.data.length; i += 4) {
+      if (pixels.data[i + 3] === 0) transparent += 1;
+      else if (pixels.data[i] < 140) tile += 1;
+    }
+    assert.ok(transparent > 20, `transparent pixels ${transparent}`);
+    assert.ok(tile > 100, `tile pixels ${tile}`);
   });
 
   it("keeps a transparent logo as PNG and does not enlarge it", async () => {

@@ -10,8 +10,8 @@ import {
   Camera,
   Loader2,
 } from "lucide-react";
-import type { BrochureColor } from "@/lib/brochure-types";
-import { facePhotoMismatch } from "@/lib/swatch-geometry";
+import type { BrochureColor, BrochureSize } from "@/lib/brochure-types";
+import { facePhotoMismatch, resolveSwatchFaces } from "@/lib/swatch-geometry";
 import { proxyImageUrl } from "@/lib/image-proxy";
 import {
   detectSwatchPattern,
@@ -31,9 +31,11 @@ import { recordLesson } from "@/lib/record-lesson";
 export function SwatchImageEditor({
   productId,
   colors,
+  sizes = [],
 }: {
   productId: string;
   colors: BrochureColor[];
+  sizes?: BrochureSize[];
 }) {
   const router = useRouter();
   const missingCount = colors.filter((c) => !c.imageUrl || c.imageUrl.trim() === "").length;
@@ -277,11 +279,7 @@ export function SwatchImageEditor({
                 <div className="mb-2 flex items-center gap-2">
                   <span className="text-[11px] uppercase tracking-wider text-fg-faint">color</span>
                   <span className="font-semibold lowercase text-fg">{c.trinityName}</span>
-                  {(c.faces ?? []).some(
-                    (face) =>
-                      face.sizeUnknown ||
-                      (!(face.aspectRatio && face.aspectRatio > 0) && !(face.widthIn && face.heightIn)),
-                  ) && (
+                  {resolveSwatchFaces(c, sizes).some((face) => face.sizeUnknown) && (
                       <span className="text-[11px] font-medium text-amber-700">size unknown</span>
                     )}
                   {(c.faces ?? []).some((face) => facePhotoMismatch(face)) && (

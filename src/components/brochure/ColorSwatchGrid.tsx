@@ -65,11 +65,12 @@ function ColorGroup({
           face.photoHeight,
           face.sizeUnknown,
           face.photoMismatch,
+          face.keepOutline,
         );
         return (
           <div key={`${name}-${index}`} className="flex flex-col items-center" style={{ width: column }}>
             <div
-              className="flex items-center justify-center overflow-hidden bg-[#f3f3f3]"
+              className="flex items-center justify-center overflow-hidden bg-white"
               style={{ width: box.width, height: box.height }}
             >
               {face.imageUrl ? (

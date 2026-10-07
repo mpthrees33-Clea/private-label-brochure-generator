@@ -13,6 +13,8 @@ export interface ResolvedFace {
   photoHeight?: number | null;
   /** The only photo we have is a different shape than the tile. Contain it. */
   photoMismatch?: boolean;
+  /** Irregular sheet (trapezoid). Contain the photo so the outline is not cropped. */
+  keepOutline?: boolean;
   caption: string;
 }
 
@@ -42,8 +44,9 @@ export function swatchFit(
   photoHeight?: number | null,
   sizeUnknown?: boolean,
   photoMismatch?: boolean,
+  keepOutline?: boolean,
 ): "cover" | "contain" {
-  if (sizeUnknown || photoMismatch) return "contain";
+  if (sizeUnknown || photoMismatch || keepOutline) return "contain";
   if (!photoWidth || !photoHeight || photoWidth <= 0 || photoHeight <= 0 || ratio <= 0) {
     return "cover";
   }
@@ -122,15 +125,18 @@ export function resolveSwatchFaces(
         imageUrl: face.imageUrl,
         ratio: resolved.ratio,
         sizeUnknown: resolved.sizeUnknown,
-        widthIn: face.widthIn,
-        heightIn: face.heightIn,
+        widthIn: resolved.widthIn ?? face.widthIn,
+        heightIn: resolved.heightIn ?? face.heightIn,
         photoWidth: face.photoWidth,
         photoHeight: face.photoHeight,
         photoMismatch: facePhotoMismatch({
           ...face,
           aspectRatio: resolved.ratio,
           sizeUnknown: resolved.sizeUnknown,
+          widthIn: resolved.widthIn ?? face.widthIn,
+          heightIn: resolved.heightIn ?? face.heightIn,
         }),
+        keepOutline: resolved.keepOutline,
         caption: faceCaption(color.trinityName, face, index, stored),
       };
     });
@@ -189,16 +195,33 @@ export function resolveSwatchFaces(
 function ratioForFace(
   face: BrochureFace,
   sizes: BrochureSize[],
-): { ratio: number; sizeUnknown: boolean } {
-  if (typeof face.aspectRatio === "number" && face.aspectRatio > 0) {
+): { ratio: number; sizeUnknown: boolean; widthIn?: number; heightIn?: number; keepOutline?: boolean } {
+  const sheet = mosaicSheetSize(face, sizes);
+  if (sheet && (!(face.widthIn && face.heightIn) || face.sizeUnknown)) {
+    return { ...framed(sheet.widthIn, sheet.heightIn), ...sheet };
+  }
+  if (typeof face.aspectRatio === "number" && face.aspectRatio > 0 && !face.sizeUnknown) {
     return { ratio: clamp(face.aspectRatio), sizeUnknown: false };
   }
-  if (face.widthIn && face.heightIn) return framed(face.widthIn, face.heightIn);
+  if (face.widthIn && face.heightIn && !face.sizeUnknown) return framed(face.widthIn, face.heightIn);
   const fromUrl = sizeFromUrl(face.imageUrl);
   if (fromUrl) return framed(fromUrl.widthIn, fromUrl.heightIn);
   // A stored face with no nominal size stays unknown. Borrowing the
   // chart's first format would label a trapezoid as a 4×4.
   return { ratio: 1, sizeUnknown: true };
+}
+
+/** A trapezoid mosaic is sold as a sheet. That sheet is the nominal size. */
+function mosaicSheetSize(
+  face: BrochureFace,
+  sizes: BrochureSize[],
+): { widthIn: number; heightIn: number; keepOutline: boolean } | null {
+  if (!/trapez|trapes/i.test(face.imageUrl || "")) return null;
+  const size = sizes.find((item) => /trapezoid/i.test(item.label) && item.sheetLabel);
+  if (!size?.sheetLabel) return null;
+  const parsed = parseSizeLabel(size.sheetLabel);
+  if (!parsed || parsed.widthIn <= 0 || parsed.heightIn <= 0) return null;
+  return { widthIn: parsed.widthIn, heightIn: parsed.heightIn, keepOutline: true };
 }
 
 /** A missing size is a square hold so the old 1:2 frame cannot sneak back. */

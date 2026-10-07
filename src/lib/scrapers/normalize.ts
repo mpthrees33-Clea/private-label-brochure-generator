@@ -101,7 +101,24 @@ export function finalizeScrapedProduct(
     decoImageUrl: c.decoImageUrl ? cleanImageUrl(c.decoImageUrl) : undefined,
     faces: c.faces?.map((face) => ({ ...face, imageUrl: cleanImageUrl(face.imageUrl) })),
   }));
+  applyMosaicSheetFaces(next);
   return next;
+}
+
+/** A trapezoid mosaic is sold as a sheet. That sheet is the nominal size. */
+function applyMosaicSheetFaces(product: ScrapedProduct): void {
+  const size = product.sizes.find((item) => /trapezoid/i.test(item.label) && item.sheetLabel);
+  if (!size?.sheetLabel) return;
+  const parsed = parseSizeLabel(size.sheetLabel);
+  if (!parsed || parsed.widthIn <= 0 || parsed.heightIn <= 0) return;
+  for (const color of product.colors) {
+    if (!color.faces) continue;
+    color.faces = color.faces.map((face) => {
+      if (!/trapez|trapes/i.test(face.imageUrl || "")) return face;
+      if (face.widthIn && face.heightIn && face.sizeUnknown === false) return face;
+      return stampFaceRatio({ ...face, widthIn: parsed.widthIn, heightIn: parsed.heightIn });
+    });
+  }
 }
 
 function applyCollectionName(
@@ -604,11 +621,24 @@ function applyPrintedFinish(product: ScrapedProduct, sourceText: string): void {
   product.finishLegend = sortFinishes(printed);
 }
 
-function printedFinishes(text: string): string[] {
+const FINISH_TOKEN =
+  "semi[-\\s]?gloss|glossy|gloss|matte|matt|polished|silk|textured|natural|grip|honed|bright";
+
+export function printedFinishes(text: string): string[] {
+  // Spec tables concatenate cell text ("FinishSemi-Gloss"). Split that
+  // join so the finish word is a real token. A marketing phrase like
+  // "glossy depth" is not a finish; "glossy finish" is.
+  const normalized = text.replace(/([a-z])([A-Z])/g, "$1 $2");
+  const labeled = finishesAfterLabel(normalized);
+  if (labeled.length > 0) return labeled;
+  return finishesNamedBefore(normalized);
+}
+
+function finishesAfterLabel(text: string): string[] {
   const found: string[] = [];
   const label = /\bfinish\b\s*[:=]?\s*/gi;
+  const token = new RegExp(`^(?:${FINISH_TOKEN})\\b`, "i");
   let match: RegExpExecArray | null;
-  const token = /^(?:semi[-\s]?gloss|glossy|gloss|matte|matt|polished|silk|textured|natural|grip|honed|bright)\b/i;
   while ((match = label.exec(text))) {
     let rest = text.slice(match.index + match[0].length, match.index + match[0].length + 80);
     let guard = 0;
@@ -622,6 +652,17 @@ function printedFinishes(text: string): string[] {
       rest = rest.slice(hit[0].length);
     }
     if (found.length > 0) break;
+  }
+  return found;
+}
+
+function finishesNamedBefore(text: string): string[] {
+  const found: string[] = [];
+  const named = new RegExp(`\\b(${FINISH_TOKEN})\\s+finish\\b`, "gi");
+  let match: RegExpExecArray | null;
+  while ((match = named.exec(text))) {
+    const canon = canonicalFinish(match[1]);
+    if (canon && !found.includes(canon)) found.push(canon);
   }
   return found;
 }

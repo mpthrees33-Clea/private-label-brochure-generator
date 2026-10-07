@@ -115,12 +115,13 @@ describe("page 2 swatch stack", () => {
     assert.ok(gap >= 8, `mixed inch void was ${gap}px`);
   });
 
-  it("fits nine upright 4x16 tiles without dropping under the minimum slot", () => {
+  it("wraps nine upright 4x16 tiles so the gap above the specs stays tight", () => {
     const layout = computeSwatchLayout(9, false, [], ratiosFor(9, [0.25]));
     assert.equal(layout.height, layout.width * 4);
-    assert.ok(layout.width >= 64, `4x16 width ${layout.width}`);
+    assert.equal(layout.primaryRows, 2);
+    assert.ok(layout.width >= 40, `4x16 width ${layout.width}`);
     const gap = voidAboveSpecs(9, [0.25]);
-    assert.ok(gap >= 8, `4x16 void was ${gap}px`);
+    assert.ok(gap >= 8 && gap <= 96, `4x16 void was ${gap}px`);
   });
 
 });
