@@ -81,6 +81,9 @@ function SwatchRow({
                   src={proxyImageUrl(src)}
                   alt={label}
                   className="h-full w-full object-cover"
+                  data-print-w={swatchWidth}
+                  data-print-h={swatchHeight}
+                  data-print-fit="cover"
                 />
               ) : null}
             </div>

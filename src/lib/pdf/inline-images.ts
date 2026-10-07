@@ -2,6 +2,7 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { fetchRemoteImage } from "@/lib/image-fetch";
 import { sniffImageMime } from "@/lib/image-sniff";
+import { compressForPrint, type PrintSize } from "@/lib/pdf/print-image";
 import { readUpload } from "@/lib/store/uploads";
 
 // 1×1 transparent gif. Used when an image cannot be inlined so Chromium
@@ -10,19 +11,26 @@ import { readUpload } from "@/lib/store/uploads";
 const TRANSPARENT_GIF =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
+interface ImgRef {
+  src: string;
+  size: PrintSize;
+}
+
 export async function inlineBrochureImages(html: string): Promise<string> {
-  const srcs = new Set<string>();
-  const re = /\bsrc="([^"]*)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(html))) {
-    srcs.add(decodeHtml(match[1]));
+  const images = parseImages(html);
+  const bySrc = new Map<string, PrintSize>();
+  for (const image of images) {
+    // The same URL can appear at two sizes. Keep the larger box so a
+    // hero and a swatch that share a file both stay sharp.
+    const prev = bySrc.get(image.src);
+    if (!prev || boxArea(image.size) > boxArea(prev)) bySrc.set(image.src, image.size);
   }
 
   const replacements = new Map<string, string>();
   await Promise.all(
-    [...srcs].map(async (src) => {
+    [...bySrc.entries()].map(async ([src, size]) => {
       if (!src || src.startsWith("data:")) return;
-      replacements.set(src, (await imageSrcToDataUri(src)) ?? TRANSPARENT_GIF);
+      replacements.set(src, (await imageSrcToDataUri(src, size)) ?? TRANSPARENT_GIF);
     }),
   );
 
@@ -37,30 +45,58 @@ export async function inlineBrochureImages(html: string): Promise<string> {
   return out;
 }
 
-async function imageSrcToDataUri(src: string): Promise<string | null> {
+function parseImages(html: string): ImgRef[] {
+  const tags = html.match(/<img\b[^>]*>/gi) ?? [];
+  const out: ImgRef[] = [];
+  for (const tag of tags) {
+    const srcMatch = /\bsrc="([^"]*)"/.exec(tag);
+    if (!srcMatch) continue;
+    const width = attrNumber(tag, "data-print-w");
+    const height = attrNumber(tag, "data-print-h");
+    const fit = /\bdata-print-fit="cover"/.test(tag) ? "cover" : "inside";
+    out.push({ src: decodeHtml(srcMatch[1]), size: { width, height, fit } });
+  }
+  return out;
+}
+
+function attrNumber(tag: string, name: string): number | undefined {
+  const match = new RegExp(`\\b${name}="(\\d+)"`).exec(tag);
+  if (!match) return undefined;
+  const value = Number(match[1]);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function boxArea(size: PrintSize): number {
+  return (size.width ?? 1) * (size.height ?? 1);
+}
+
+async function imageSrcToDataUri(src: string, size: PrintSize): Promise<string | null> {
   try {
-    if (src.startsWith("/api/proxy-image")) {
-      const url = new URL(src, "http://brochure.local").searchParams.get("url");
-      if (!url) return null;
-      return bufferToDataUri(await fetchRemoteImage(url));
-    }
-    if (src.startsWith("/api/uploads/")) {
-      const filename = decodeURIComponent(src.slice("/api/uploads/".length).split("?")[0]);
-      const uploaded = await readUpload(filename);
-      if (!uploaded) return null;
-      return bufferToDataUri({ bytes: uploaded.buffer, contentType: uploaded.contentType });
-    }
-    if (src.startsWith("/")) {
-      const file = await readPublicFile(src);
-      if (!file) return null;
-      return bufferToDataUri(file);
-    }
-    if (/^https?:\/\//i.test(src)) {
-      return bufferToDataUri(await fetchRemoteImage(src));
-    }
+    const file = await loadImage(src);
+    if (!file) return null;
+    const compressed = await compressForPrint(file.bytes, size).catch(() => null);
+    return bufferToDataUri(compressed ?? file);
   } catch {
     return null;
   }
+}
+
+async function loadImage(
+  src: string,
+): Promise<{ bytes: Buffer; contentType: string } | null> {
+  if (src.startsWith("/api/proxy-image")) {
+    const url = new URL(src, "http://brochure.local").searchParams.get("url");
+    if (!url) return null;
+    return fetchRemoteImage(url);
+  }
+  if (src.startsWith("/api/uploads/")) {
+    const filename = decodeURIComponent(src.slice("/api/uploads/".length).split("?")[0]);
+    const uploaded = await readUpload(filename);
+    if (!uploaded) return null;
+    return { bytes: uploaded.buffer, contentType: uploaded.contentType };
+  }
+  if (src.startsWith("/")) return readPublicFile(src);
+  if (/^https?:\/\//i.test(src)) return fetchRemoteImage(src);
   return null;
 }
 

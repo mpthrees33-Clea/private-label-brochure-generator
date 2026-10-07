@@ -10,6 +10,7 @@ const nextConfig = {
       "@sparticuz/chromium-min",
       "playwright",
       "exceljs",
+      "sharp",
     ],
     // Brand and sample images are read from disk while inlining the PDF
     // HTML. Vercel does not put `public/` on the function filesystem

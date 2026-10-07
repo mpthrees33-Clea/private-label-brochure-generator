@@ -18,6 +18,9 @@ export function ContactBlock() {
           src="/brand/trinity-qr.png"
           alt="more info"
           className="h-[72px] w-[72px]"
+          data-print-w={72}
+          data-print-h={72}
+          data-print-fit="inside"
         />
         <div className="flex flex-col justify-center self-stretch">
           <p>866-774-3390</p>

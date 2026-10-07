@@ -5,6 +5,7 @@ import type {
 } from "@/lib/brochure-types";
 import {
   BLOCK_DEFAULTS,
+  CONTENT_W,
   PAGE_W,
   PAGE_H,
   getSwatchLayout,
@@ -85,6 +86,9 @@ function Page1({
               src={proxyImageUrl(data.heroImageUrl)}
               alt={data.trinityName}
               className="h-full w-full object-cover"
+              data-print-w={CONTENT_W}
+              data-print-h={Math.round((CONTENT_W * 20) / 19)}
+              data-print-fit="cover"
             />
           ) : null}
         </div>
