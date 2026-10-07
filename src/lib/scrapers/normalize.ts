@@ -73,6 +73,7 @@ export function finalizeScrapedProduct(
     const listed = extractListedFormats(pageHtml);
     const split = splitSpecialPieces(pageHtml, listed);
     applyListedFormats(next, split.formats, Boolean(catalog && catalog.groups.length > 0));
+    dropUnlistedChipFields(next, split.formats);
     const onChart = new Set(next.sizes.map((size) => sizeChartLabel(size).toLowerCase()));
     next.specialPieces = split.specials.filter((label) => !onChart.has(label.toLowerCase()));
     applySharedAvailability(next, pageHtml);
@@ -908,6 +909,40 @@ function applyListedFormats(
     if (existing.iconKind === "rectangle" && row.iconKind !== "rectangle") {
       existing.iconKind = row.iconKind;
     }
+  }
+}
+
+/** A "4x4" column that is only the chip of a listed mosaic is not a loose tile. */
+function dropUnlistedChipFields(product: ScrapedProduct, listed: ListedFormat[]): void {
+  const parsedListed = listed
+    .map((format) => parseSizeLabel(format.raw))
+    .filter((parsed): parsed is ParsedSize => parsed != null && parsed.widthIn > 0);
+  const mosaicChips = parsedListed.filter((parsed) => parsed.piece === "mosaic");
+  if (mosaicChips.length === 0) return;
+  const dropped = new Set<string>();
+  product.sizes = product.sizes.filter((size) => {
+    const parsed = parseSizeLabel(`${size.label}${size.isDeco ? " deco" : ""}`);
+    if (!parsed || parsed.piece === "mosaic" || parsed.isDeco) return true;
+    const twin = mosaicChips.some(
+      (chip) => chip.widthIn === parsed.widthIn && chip.heightIn === parsed.heightIn,
+    );
+    const fieldListed = parsedListed.some(
+      (item) =>
+        item.piece !== "mosaic" &&
+        !item.isDeco &&
+        item.widthIn === parsed.widthIn &&
+        item.heightIn === parsed.heightIn,
+    );
+    if (!twin || fieldListed) return true;
+    dropped.add(sizeChartLabel(size).toLowerCase());
+    dropped.add(parsed.label.toLowerCase());
+    return false;
+  });
+  if (dropped.size === 0) return;
+  const charts = product.sizes.map((size) => sizeChartLabel(size));
+  for (const key of Object.keys(product.availability)) {
+    const kept = (product.availability[key] ?? []).filter((label) => !dropped.has(label.toLowerCase()));
+    product.availability[key] = kept.length > 0 ? kept : charts;
   }
 }
 

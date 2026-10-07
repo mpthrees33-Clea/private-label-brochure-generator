@@ -1,5 +1,5 @@
 import type { BrochureColor, BrochureSize } from "@/lib/brochure-types";
-import type { SwatchLayout } from "@/lib/brochure-layout";
+import { swatchLabelFontSize, type SwatchLayout } from "@/lib/brochure-layout";
 import { proxyImageUrl } from "@/lib/image-proxy";
 import { nominalUnits, resolveSwatchFaces, swatchFit, type ResolvedFace } from "@/lib/swatch-geometry";
 
@@ -55,6 +55,8 @@ function ColorGroup({
 }) {
   const boxes = faces.map((face) => faceBox(face, layout));
   const column = Math.max(8, ...boxes.map((box) => box.width));
+  const formats = faces.filter((face) => face.formatLabel);
+  const groupName = formats.length >= 2 ? name : "";
   return (
     <div className="flex flex-col items-center" style={{ width: column, gap: `${ROW_GAP}px` }}>
       {faces.map((face, index) => {
@@ -67,22 +69,24 @@ function ColorGroup({
           face.photoMismatch,
           face.keepOutline,
         );
+        const caption = face.formatLabel && groupName ? face.formatLabel : face.caption;
         return (
           <div key={`${name}-${index}`} className="flex flex-col items-center" style={{ width: column }}>
             <div
-              className="flex items-center justify-center overflow-hidden bg-white"
+              className="flex items-center justify-center overflow-hidden bg-transparent"
               style={{ width: box.width, height: box.height }}
             >
               {face.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={proxyImageUrl(face.imageUrl, { trim: true })}
-                  alt={face.caption}
+                  alt={caption}
                   className={
                     fit === "cover"
                       ? "h-full w-full object-cover object-center"
                       : "max-h-full max-w-full object-contain object-center"
                   }
+                  style={{ background: "transparent" }}
                   data-print-w={box.width}
                   data-print-h={box.height}
                   data-print-fit={fit}
@@ -94,25 +98,33 @@ function ColorGroup({
                 </span>
               )}
             </div>
-            <span
-              className="lowercase text-brochure-gray"
-              style={{
-                display: "block",
-                width: column,
-                marginTop: 4,
-                fontSize: 11,
-                lineHeight: 1.15,
-                maxHeight: Math.max(12, layout.labelHeight - 4),
-                overflow: "hidden",
-                textAlign: "center",
-              }}
-            >
-              {face.caption}
-            </span>
+            <SwatchCaption text={caption} width={column} />
           </div>
         );
       })}
+      {groupName ? <SwatchCaption text={groupName} width={column} /> : null}
     </div>
+  );
+}
+
+function SwatchCaption({ text, width }: { text: string; width: number }) {
+  const fontSize = swatchLabelFontSize(text, width);
+  return (
+    <span
+      className="lowercase text-brochure-gray"
+      style={{
+        display: "block",
+        width,
+        marginTop: 4,
+        fontSize,
+        lineHeight: 1.15,
+        textAlign: "center",
+        overflow: "visible",
+        overflowWrap: "anywhere",
+      }}
+    >
+      {text}
+    </span>
   );
 }
 

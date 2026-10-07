@@ -97,8 +97,47 @@ const MAX_PRIMARY_ROWS = 3;
 
 /** How many caption lines a color name needs at this swatch width. Capped at 2. */
 export function swatchLabelLines(name: string, width: number): number {
-  const perLine = Math.max(1, Math.floor(width / 6.1));
-  return Math.min(2, Math.max(1, Math.ceil(name.trim().length / perLine)));
+  return Math.min(2, labelLinesAt(name, width, 11));
+}
+
+const LABEL_CHAR_WIDTH = 0.62;
+
+/** Largest caption size that fits in two lines. A one-word name shrinks to one line when it still stays readable. */
+export function swatchLabelFontSize(text: string, width: number): number {
+  const name = text.trim();
+  if (!name || width <= 0) return 11;
+  let fontSize = 11;
+  while (fontSize > 8 && labelLinesAt(name, width, fontSize) > 2) fontSize -= 0.5;
+  if (!name.includes(" ")) {
+    let oneLine = fontSize;
+    while (oneLine > 8 && labelLinesAt(name, width, oneLine) > 1) oneLine -= 0.5;
+    if (labelLinesAt(name, width, oneLine) === 1) return oneLine;
+  }
+  return fontSize;
+}
+
+function labelLinesAt(text: string, width: number, fontSize: number): number {
+  const name = text.trim();
+  if (!name) return 1;
+  const perLine = Math.max(1, Math.floor(width / (fontSize * LABEL_CHAR_WIDTH)));
+  const words = name.split(/\s+/);
+  let lines = 1;
+  let column = 0;
+  for (const word of words) {
+    if (word.length > perLine) {
+      const chunks = Math.ceil(word.length / perLine);
+      lines += column === 0 ? chunks - 1 : chunks;
+      column = word.length % perLine;
+      continue;
+    }
+    if (column === 0) column = word.length;
+    else if (column + 1 + word.length <= perLine) column += 1 + word.length;
+    else {
+      lines += 1;
+      column = word.length;
+    }
+  }
+  return Math.max(1, lines);
 }
 
 export interface NominalInches {

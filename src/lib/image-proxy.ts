@@ -12,5 +12,6 @@ export function proxyImageUrl(
   if (trimmed.startsWith("data:")) return trimmed;
   if (!/^https?:\/\//i.test(trimmed)) return trimmed;
   const base = `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
-  return opts?.trim ? `${base}&trim=1` : base;
+  // tv busts the immutable image cache when the trim changes.
+  return opts?.trim ? `${base}&trim=1&tv=2` : base;
 }

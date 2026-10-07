@@ -21,6 +21,7 @@ import { TechSpecsTable } from "./TechSpecsTable";
 import { ContactBlock } from "./ContactBlock";
 import { FinishMarker } from "./FinishMarker";
 import { reconcileFinishLegend } from "@/lib/finish-legend";
+import { omitChipFieldSizes } from "@/lib/swatch-geometry";
 
 export function resolveBlockPosition(
   id: BlockId,
@@ -47,7 +48,7 @@ export function Brochure({
    * name occurrence in the description. */
   factoryName?: string;
 }) {
-  data = { ...data, finishLegend: reconcileFinishLegend(data) };
+  data = omitChipFieldSizes({ ...data, finishLegend: reconcileFinishLegend(data) });
   const swatch = getSwatchLayout(data);
   return (
     <div className="brochure-root flex flex-col items-center gap-6 bg-[#e6e8eb] py-6">

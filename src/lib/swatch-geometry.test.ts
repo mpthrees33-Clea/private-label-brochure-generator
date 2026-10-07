@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { BrochureColor } from "./brochure-types";
 import { parseSizeLabel } from "./scrapers/size-format";
-import { nominalAspectRatio, resolveSwatchFaces, swatchFit } from "./swatch-geometry";
+import { nominalAspectRatio, omitChipFieldSizes, resolveSwatchFaces, swatchFit } from "./swatch-geometry";
 
 function ratioOf(label: string): number | null {
   const parsed = parseSizeLabel(label);
@@ -142,6 +142,77 @@ describe("nominal size to frame ratio", () => {
     assert.equal(faces[1].ratio, 1);
     assert.equal(faces[1].keepOutline, true);
     assert.equal(faces[0].widthIn, 4);
+  });
+
+  it("draws a 4x4 mosaic sheet at the same size as the trapezoid sheet", () => {
+    const faces = resolveSwatchFaces(
+      {
+        trinityName: "alabaster",
+        imageUrl: "https://cdn.example/Alabaster-4x4-Large.jpeg",
+        faces: [
+          { imageUrl: "https://cdn.example/Alabaster-4x4-Large.jpeg", widthIn: 4, heightIn: 4, aspectRatio: 1 },
+          {
+            imageUrl: "https://style-access.com/Alabaster-Trapesoid-Large.jpeg",
+            widthIn: 12,
+            heightIn: 12,
+            aspectRatio: 1,
+          },
+        ],
+      },
+      [
+        { label: '4"x4"', iconKind: "square" },
+        { label: '4"x4" mosaic', iconKind: "mosaic", sheetLabel: '12"x12"' },
+        { label: "trapezoid mosaic", iconKind: "mosaic", sheetLabel: '12"x12"' },
+      ],
+    );
+    assert.equal(faces[0].widthIn, 12);
+    assert.equal(faces[1].widthIn, 12);
+    assert.equal(faces[0].heightIn, faces[1].heightIn);
+    assert.equal(faces[0].caption, "4x4 mosaic");
+    assert.equal(faces[1].caption, "trapezoid");
+    assert.equal(faces[1].keepOutline, true);
+  });
+
+  it("labels two field sizes once by format", () => {
+    const faces = resolveSwatchFaces({
+      trinityName: "cloud",
+      imageUrl: "https://cdn.example/cloud-4x4.jpg",
+      faces: [
+        { imageUrl: "https://cdn.example/cloud-4x4.jpg", widthIn: 4, heightIn: 4, aspectRatio: 1 },
+        { imageUrl: "https://cdn.example/cloud-3x6.jpg", widthIn: 3, heightIn: 6, aspectRatio: 0.5 },
+      ],
+    });
+    assert.equal(faces[0].caption, "4x4");
+    assert.equal(faces[1].caption, "3x6");
+    assert.equal(faces[0].widthIn, 4);
+    assert.equal(faces[1].widthIn, 3);
+  });
+
+  it("drops a loose 4x4 that only repeats the mosaic chip", () => {
+    const data = omitChipFieldSizes({
+      trinityName: "ithaca",
+      trinityTagline: "glazed ceramic mosaic wall tile",
+      description: "{{name}} mosaic.",
+      heroImageUrl: "https://cdn.example/hero.jpg",
+      colors: [],
+      sizes: [
+        { label: '4"x4"', iconKind: "square" },
+        { label: '4"x4" mosaic', iconKind: "mosaic", sheetLabel: '12"x12"' },
+        { label: "trapezoid mosaic", iconKind: "mosaic", sheetLabel: '12"x12"' },
+      ],
+      availability: { alabaster: ['4"x4"', '4"x4" mosaic (12"x12" sheet)', 'trapezoid mosaic (12"x12" sheet)'] },
+      techSpecs: {},
+      finishLegend: ["semi-gloss"],
+      footnotes: [],
+    });
+    assert.deepEqual(
+      data.sizes.map((size) => size.label),
+      ['4"x4" mosaic', "trapezoid mosaic"],
+    );
+    assert.deepEqual(data.availability.alabaster, [
+      '4"x4" mosaic (12"x12" sheet)',
+      'trapezoid mosaic (12"x12" sheet)',
+    ]);
   });
 
   it("uses a listed 4x4 when the color has no stored face", () => {

@@ -5,6 +5,7 @@ import {
   PAGE_H,
   computeSwatchLayout,
   sizeMatrixTop,
+  swatchLabelFontSize,
   swatchLabelLines,
 } from "./brochure-layout";
 
@@ -67,6 +68,9 @@ describe("page 2 swatch stack", () => {
     assert.equal(swatchLabelLines("lagoon", short.width), 1);
     assert.equal(wrapped.labelHeight, 32);
     assert.equal(swatchLabelLines(longName, wrapped.width), 2);
+    assert.ok(swatchLabelFontSize("ultramarine", 43) >= 8);
+    assert.ok(swatchLabelFontSize("sandbank", 43) <= 9);
+    assert.equal(swatchLabelLines("ultramarine", 43), 2);
     assert.ok(sizeMatrixTop(wrapped) >= sizeMatrixTop(short));
     assert.equal(wrapped.height, wrapped.width * 2);
   });

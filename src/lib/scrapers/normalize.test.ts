@@ -296,6 +296,25 @@ describe("listed factory formats", () => {
       '4"x4" mosaic (12"x12" sheet)',
       'trapezoid mosaic (12"x12" sheet)',
     ]);
+
+    const withLooseChip = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Atlas",
+        factoryUrl: "https://style-access.com/atlas/",
+        sizes: [
+          { label: '4"x4"', iconKind: "square" },
+          { label: "4x4 mosaic", iconKind: "mosaic" },
+          { label: "trapezoid mosaic", iconKind: "mosaic" },
+        ],
+        colors: [{ name: "Alabaster", imageUrl: "https://cdn.example/alabaster.jpg" }],
+        availability: { Alabaster: ['4"x4"', "4x4 mosaic", "trapezoid mosaic"] },
+      }),
+      { pageHtml: ATLAS_HTML, pageTitle: "Atlas", sourceText: "Atlas mosaics" },
+    );
+    assert.equal(
+      withLooseChip.sizes.some((size) => size.label === '4"x4"' && !/mosaic/i.test(size.label)),
+      false,
+    );
     assert.equal(product.techSpecs.thickness, "9mm");
     assert.equal(product.techSpecs.shadeVariation, "v3");
     assert.equal(product.techSpecs.waterAbsorption, "> 15%");

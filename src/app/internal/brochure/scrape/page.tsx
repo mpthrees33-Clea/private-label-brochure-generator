@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { scrapeProduct } from "@/lib/scrapers";
 import { scrapedToBrochure } from "@/lib/scraped-to-brochure";
-import { createProduct, findByFactoryUrl } from "@/lib/store/products";
+import { createProduct, findByFactoryUrl, updateProduct } from "@/lib/store/products";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,9 +14,9 @@ export const maxDuration = 60;
 export default async function ScrapeRenderPage({
   searchParams,
 }: {
-  searchParams: Promise<{ url?: string }>;
+  searchParams: Promise<{ url?: string; retest?: string }>;
 }) {
-  const { url } = await searchParams;
+  const { url, retest } = await searchParams;
   if (!url) {
     return (
       <main className="mx-auto max-w-xl px-6 py-10 text-fg">
@@ -31,7 +31,7 @@ export default async function ScrapeRenderPage({
 
   // Dedupe — factoryUrl can only be private-labeled once.
   const existing = await findByFactoryUrl(url);
-  if (existing) {
+  if (existing && retest !== "1") {
     redirect(`/products/${existing.id}`);
   }
 
@@ -60,6 +60,17 @@ export default async function ScrapeRenderPage({
   }
 
   const data = scrapedToBrochure(scraped);
+
+  if (existing) {
+    const updated = await updateProduct(existing.id, {
+      ...data,
+      trinityName: existing.trinityName,
+      factory: scraped.factory,
+      factoryName: scraped.factoryName,
+      factoryUrl: scraped.factoryUrl,
+    });
+    redirect(`/products/${updated.id}`);
+  }
 
   const created = await createProduct({
     ...data,

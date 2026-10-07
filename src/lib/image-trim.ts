@@ -10,7 +10,9 @@ export const NEAR_WHITE_THRESHOLD = 18;
 // A concave sheet (trapezoid mosaic) still has white bays after the
 // outer border is cut. Only white that touches the edge is removed, so
 // a pale tile face stays opaque and the sheet silhouette is kept.
-const EDGE_WHITE_DELTA = 14;
+// 22 clears the white notches in a two-sheet mosaic photo. The tile
+// body (Puro, alabaster) sits darker than this and stays opaque.
+const EDGE_WHITE_DELTA = 22;
 
 export async function trimNearWhite(
   bytes: Buffer,

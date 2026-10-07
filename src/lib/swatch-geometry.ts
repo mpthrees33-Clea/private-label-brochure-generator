@@ -1,5 +1,5 @@
-import type { BrochureColor, BrochureFace, BrochureSize } from "./brochure-types";
-import { parseSizeLabel } from "./scrapers/size-format";
+import type { BrochureColor, BrochureData, BrochureFace, BrochureSize } from "./brochure-types";
+import { parseSizeLabel, sizeChartLabel } from "./scrapers/size-format";
 
 export interface ResolvedFace {
   imageUrl: string;
@@ -15,6 +15,8 @@ export interface ResolvedFace {
   photoMismatch?: boolean;
   /** Irregular sheet (trapezoid). Contain the photo so the outline is not cropped. */
   keepOutline?: boolean;
+  /** Short format under a sheet photo, e.g. "4x4 mosaic" or "trapezoid". */
+  formatLabel?: string;
   caption: string;
 }
 
@@ -113,33 +115,67 @@ export function nominalAspectRatio(
   return clamp(short / long);
 }
 
+/** Drop a field column that only repeats a mosaic chip (Atlas 4×4 vs 4×4 sheet). */
+export function omitChipFieldSizes(data: BrochureData): BrochureData {
+  const chips = data.sizes.filter(
+    (size) => size.sheetLabel && /mosaic/i.test(size.label) && !/trapezoid/i.test(size.label),
+  );
+  if (chips.length === 0) return data;
+  const dropped = new Set<string>();
+  const sizes = data.sizes.filter((size) => {
+    if (/mosaic|trapezoid/i.test(size.label) || size.isDeco) return true;
+    const parsed = parseSizeLabel(size.label);
+    if (!parsed || parsed.widthIn <= 0) return true;
+    const twin = chips.some((chip) => {
+      const piece = parseSizeLabel(chip.label);
+      return Boolean(piece && piece.widthIn === parsed.widthIn && piece.heightIn === parsed.heightIn);
+    });
+    if (!twin) return true;
+    dropped.add(sizeChartLabel(size).toLowerCase());
+    dropped.add(parsed.label.toLowerCase());
+    return false;
+  });
+  if (dropped.size === 0) return data;
+  const charts = sizes.map((size) => sizeChartLabel(size));
+  const availability: BrochureData["availability"] = {};
+  for (const [key, labels] of Object.entries(data.availability)) {
+    const kept = labels.filter((label) => !dropped.has(label.toLowerCase()));
+    availability[key] = kept.length > 0 ? kept : charts;
+  }
+  return { ...data, sizes, availability };
+}
+
 export function resolveSwatchFaces(
   color: BrochureColor,
   sizes: BrochureSize[] = [],
 ): ResolvedFace[] {
   const stored = (color.faces ?? []).filter((face) => face.imageUrl && face.imageUrl.trim());
   if (stored.length > 0) {
-    return stored.map((face, index) => {
+    const resolvedFaces = stored.map((face, index) => {
       const resolved = ratioForFace(face, sizes);
+      const widthIn = resolved.widthIn ?? face.widthIn;
+      const heightIn = resolved.heightIn ?? face.heightIn;
       return {
         imageUrl: face.imageUrl,
         ratio: resolved.ratio,
         sizeUnknown: resolved.sizeUnknown,
-        widthIn: resolved.widthIn ?? face.widthIn,
-        heightIn: resolved.heightIn ?? face.heightIn,
+        widthIn,
+        heightIn,
         photoWidth: face.photoWidth,
         photoHeight: face.photoHeight,
         photoMismatch: facePhotoMismatch({
           ...face,
           aspectRatio: resolved.ratio,
           sizeUnknown: resolved.sizeUnknown,
-          widthIn: resolved.widthIn ?? face.widthIn,
-          heightIn: resolved.heightIn ?? face.heightIn,
+          widthIn,
+          heightIn,
         }),
         keepOutline: resolved.keepOutline,
+        formatLabel: resolved.formatLabel,
         caption: faceCaption(color.trinityName, face, index, stored),
       };
     });
+    return labelPlainFaces(labelSheetFaces(equalizeSheetFaces(resolvedFaces)), color.trinityName);
   }
 
   const fieldSize = sizes.find((size) => !size.isDeco && !/\bdeco\b/i.test(size.label));
@@ -195,11 +231,16 @@ export function resolveSwatchFaces(
 function ratioForFace(
   face: BrochureFace,
   sizes: BrochureSize[],
-): { ratio: number; sizeUnknown: boolean; widthIn?: number; heightIn?: number; keepOutline?: boolean } {
-  const sheet = mosaicSheetSize(face, sizes);
-  if (sheet && (!(face.widthIn && face.heightIn) || face.sizeUnknown)) {
-    return { ...framed(sheet.widthIn, sheet.heightIn), ...sheet };
-  }
+): {
+  ratio: number;
+  sizeUnknown: boolean;
+  widthIn?: number;
+  heightIn?: number;
+  keepOutline?: boolean;
+  formatLabel?: string;
+} {
+  const sheet = sheetPhotoSize(face, sizes);
+  if (sheet) return { ...framed(sheet.widthIn, sheet.heightIn), ...sheet };
   if (typeof face.aspectRatio === "number" && face.aspectRatio > 0 && !face.sizeUnknown) {
     return { ratio: clamp(face.aspectRatio), sizeUnknown: false };
   }
@@ -211,17 +252,81 @@ function ratioForFace(
   return { ratio: 1, sizeUnknown: true };
 }
 
-/** A trapezoid mosaic is sold as a sheet. That sheet is the nominal size. */
-function mosaicSheetSize(
+/**
+ * A mosaic photo shows the sheet, not the chip. A 3×3 of 4×4 tiles is
+ * a 12×12 sheet, same as the trapezoid sheet beside it. Single field
+ * and deco tiles (an 8×8 next to a 3×16) are not sheets.
+ */
+function sheetPhotoSize(
   face: BrochureFace,
   sizes: BrochureSize[],
-): { widthIn: number; heightIn: number; keepOutline: boolean } | null {
-  if (!/trapez|trapes/i.test(face.imageUrl || "")) return null;
-  const size = sizes.find((item) => /trapezoid/i.test(item.label) && item.sheetLabel);
-  if (!size?.sheetLabel) return null;
-  const parsed = parseSizeLabel(size.sheetLabel);
-  if (!parsed || parsed.widthIn <= 0 || parsed.heightIn <= 0) return null;
-  return { widthIn: parsed.widthIn, heightIn: parsed.heightIn, keepOutline: true };
+): { widthIn: number; heightIn: number; keepOutline: boolean; formatLabel: string } | null {
+  const url = face.imageUrl || "";
+  if (/trapez|trapes/i.test(url)) {
+    const size = sizes.find((item) => /trapezoid/i.test(item.label) && item.sheetLabel);
+    const parsed = size?.sheetLabel ? parseSizeLabel(size.sheetLabel) : null;
+    const widthIn = parsed?.widthIn || 0;
+    const heightIn = parsed?.heightIn || 0;
+    if (widthIn <= 0 || heightIn <= 0) return null;
+    return { widthIn, heightIn, keepOutline: true, formatLabel: "trapezoid" };
+  }
+  const inches =
+    face.widthIn && face.heightIn
+      ? { widthIn: face.widthIn, heightIn: face.heightIn }
+      : sizeFromUrl(url);
+  if (!inches) return null;
+  const mosaic = sizes.find((item) => {
+    if (!item.sheetLabel || !/mosaic/i.test(item.label) || /trapezoid/i.test(item.label)) return false;
+    const chip = parseSizeLabel(item.label);
+    return Boolean(chip && chip.widthIn === inches.widthIn && chip.heightIn === inches.heightIn);
+  });
+  if (!mosaic?.sheetLabel) return null;
+  const sheet = parseSizeLabel(mosaic.sheetLabel);
+  if (!sheet || sheet.widthIn <= 0 || sheet.heightIn <= 0) return null;
+  const chip = parseSizeLabel(mosaic.label);
+  const formatLabel =
+    chip && chip.widthIn > 0 ? `${trimInches(chip.widthIn)}x${trimInches(chip.heightIn)} mosaic` : "mosaic";
+  return { widthIn: sheet.widthIn, heightIn: sheet.heightIn, keepOutline: false, formatLabel };
+}
+
+function trimInches(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(value);
+}
+
+/** Sheet photos in one color share one display size. Field tiles do not. */
+function equalizeSheetFaces(faces: ResolvedFace[]): ResolvedFace[] {
+  const sheets = faces.filter((face) => face.formatLabel);
+  if (sheets.length < 2) return faces;
+  const side = Math.max(...sheets.map((face) => Math.max(face.widthIn ?? 0, face.heightIn ?? 0)));
+  if (!(side > 0)) return faces;
+  const box = framed(side, side);
+  return faces.map((face) =>
+    face.formatLabel
+      ? { ...face, widthIn: side, heightIn: side, ratio: box.ratio, sizeUnknown: false }
+      : face,
+  );
+}
+
+function labelSheetFaces(faces: ResolvedFace[]): ResolvedFace[] {
+  const labels = new Set(faces.map((face) => face.formatLabel).filter(Boolean));
+  if (labels.size < 2) return faces;
+  return faces.map((face) => (face.formatLabel ? { ...face, caption: face.formatLabel } : face));
+}
+
+/** Two field sizes with no finish of their own get a format caption and one color name. */
+function labelPlainFaces(faces: ResolvedFace[], colorName: string): ResolvedFace[] {
+  if (faces.length < 2 || faces.some((face) => face.formatLabel)) return faces;
+  const allNamed = faces.every(
+    (face) => face.caption.trim().toLowerCase() === colorName.trim().toLowerCase(),
+  );
+  if (!allNamed) return faces;
+  return faces.map((face) => {
+    const formatLabel =
+      face.widthIn && face.heightIn
+        ? `${trimInches(face.widthIn)}x${trimInches(face.heightIn)}`
+        : face.caption;
+    return { ...face, formatLabel, caption: formatLabel };
+  });
 }
 
 /** A missing size is a square hold so the old 1:2 frame cannot sneak back. */
