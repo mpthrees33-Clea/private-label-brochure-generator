@@ -10,10 +10,12 @@ const ROW_GAP = 8;
 export function ColorSwatchGrid({
   colors,
   swatchWidth,
+  swatchHeight,
   perRow,
 }: {
   colors: BrochureColor[];
   swatchWidth: number;
+  swatchHeight: number;
   perRow: number;
 }) {
   const hasDeco = colors.some((c) => c.decoImageUrl && c.decoImageUrl.trim());
@@ -25,9 +27,9 @@ export function ColorSwatchGrid({
     <div style={{ display: "flex", flexDirection: "column", gap: `${ROW_GAP}px` }}>
       {chunks.map((row, idx) => (
         <div key={idx}>
-          <SwatchRow colors={row} swatchWidth={swatchWidth} />
+          <SwatchRow colors={row} swatchWidth={swatchWidth} swatchHeight={swatchHeight} />
           {hasDeco && (
-            <SwatchRow colors={row} swatchWidth={swatchWidth} deco />
+            <SwatchRow colors={row} swatchWidth={swatchWidth} swatchHeight={swatchHeight} deco />
           )}
         </div>
       ))}
@@ -38,10 +40,12 @@ export function ColorSwatchGrid({
 function SwatchRow({
   colors,
   swatchWidth,
+  swatchHeight,
   deco = false,
 }: {
   colors: BrochureColor[];
   swatchWidth: number;
+  swatchHeight: number;
   deco?: boolean;
 }) {
   return (
@@ -57,7 +61,7 @@ function SwatchRow({
           return (
             <div
               key={c.trinityName + "-deco-empty"}
-              style={{ width: swatchWidth }}
+              style={{ width: swatchWidth, height: swatchHeight }}
               aria-hidden
             />
           );
@@ -69,7 +73,7 @@ function SwatchRow({
           >
             <div
               className="aspect-[1/2] overflow-hidden bg-[#f3f3f3]"
-              style={{ width: swatchWidth }}
+              style={{ width: swatchWidth, height: swatchHeight }}
             >
               {src ? (
                 // eslint-disable-next-line @next/next/no-img-element

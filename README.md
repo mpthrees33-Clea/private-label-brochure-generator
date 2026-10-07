@@ -78,8 +78,12 @@ and appends the product to a master crossover list (exportable to XLSX).
   supports them; the AI extractor currently treats every color as
   the standard finish. Pages that have both can be patched after
   smoke-testing.
-- **Vercel function size.** Puppeteer + chromium-min is on the edge of
-  Vercel's 250 MB limit. Adding more deps may push it over.
+- **Vercel function size.** `@sparticuz/chromium-min` stays small because
+  the Chromium pack is downloaded to `/tmp` on cold start (see
+  `CHROMIUM_PACK_URL`), not bundled. `puppeteer-core` and
+  `@sparticuz/chromium-min` are externalized so webpack does not pack
+  them into the function. Playwright is a dependency but is not imported
+  by the PDF route.
 
 ## Tech stack
 
@@ -113,7 +117,8 @@ ride through rsync.
 | `SHARED_PASSWORD` | yes in prod | Login (NextAuth Credentials) |
 | `NEXTAUTH_SECRET` | yes in prod | Session signing |
 | `NEXTAUTH_URL` | yes in prod | Cookie domain |
-| `PUPPETEER_EXECUTABLE_PATH` | yes in prod | Path to system Chromium for PDF render (e.g. `/usr/bin/google-chrome-stable`) |
+| `PUPPETEER_EXECUTABLE_PATH` | yes on the VPS | Path to system Chrome for PDF render (e.g. `/usr/bin/google-chrome-stable`). Leave unset on Vercel so `@sparticuz/chromium-min` supplies Chrome. |
+| `CHROMIUM_PACK_URL` | no | HTTPS URL of the Sparticuz Chromium pack (`chromium-v148.0.0-pack.x64.tar`, or `.arm64.tar`). Defaults to the matching GitHub release. Cold starts need outbound network and writable `/tmp`. |
 | `QFB_DATA_DIR` | optional | Override `/var/lib/qfb` data root |
 | `NEXT_PUBLIC_GA_ID` | optional | Google Analytics measurement ID |
 

@@ -14,16 +14,23 @@ export const CONTENT_W = PAGE_W - 2 * PAGE_PADDING_X; // 720
 // for.
 export const HEADER_H = 100;       // pt-[20px] + h1 56*0.95 + mt-1 + tagline
 export const BOTTOM_BLOCK_H = 168; // fixed bottom-row height (tech specs + contact + padding)
-const BODY_TOP_GAP = 12;           // mt-3 below header
-const SECTION_GAP = 6;             // space-y-1.5
+const BODY_TOP_GAP = 12;           // gap below the header before swatches
+const SECTION_GAP = 8;             // gap between swatch block and size chart
 const MATRIX_HEADER_H = 68;        // sizes h3 (~18) + icon row (~50)
 const MATRIX_ROW_H = 22;           // py-1 (8) + text 10 + border-b 1 + cushion
 const FOOTNOTES_MAX_H = 16;
 const SAFETY_BUFFER = 20;
 
-const SWATCH_LABEL_H = 18;     // mt-1 (4) + text-[11px] line (14)
-const SWATCH_ROW_GAP = 8;      // mt-2 between deco rows
+const SWATCH_LABEL_H = 22;     // mt-1 (4) + 11px text at line-height 1.5 (~16.5)
+const SWATCH_ROW_GAP = 8;      // gap between swatch rows (and field→deco)
 const SWATCH_GAP_X = 12;       // gap between swatches in a row
+const PAGE2_TOP = HEADER_H + BODY_TOP_GAP;
+// A single row of width-capped 1:2 swatches (typical wall tile, 3–4
+// colors) ends high on the page and leaves a large empty band between
+// the size chart and the pinned tech-spec row. Prefer an extra row of
+// slightly smaller swatches when that band would exceed this.
+const MAX_VOID_ABOVE_SPECS = 96;
+const MIN_SWATCH_W = 72;
 
 function estimateSizeMatrixHeight(colorCount: number): number {
   return MATRIX_HEADER_H + colorCount * MATRIX_ROW_H;
@@ -36,20 +43,39 @@ export interface SwatchLayout {
   primaryRows: number;
   /** Colors per primary row (last row may have fewer). */
   perRow: number;
+  hasDeco: boolean;
+}
+
+export function swatchBlockHeight(layout: SwatchLayout): number {
+  if (layout.width <= 0 || layout.perRow <= 0) return 0;
+  const visualRows = layout.primaryRows * (layout.hasDeco ? 2 : 1);
+  return (
+    visualRows * (layout.height + SWATCH_LABEL_H) +
+    Math.max(0, visualRows - 1) * SWATCH_ROW_GAP
+  );
+}
+
+/** Page-relative y of the size chart, sitting just under the swatches. */
+export function sizeMatrixTop(layout: SwatchLayout): number {
+  return PAGE2_TOP + swatchBlockHeight(layout) + SECTION_GAP;
 }
 
 // Compute the swatch layout: how many primary rows to use and the
-// largest 1:2 swatch that fits inside page 2. We try 1..MAX_ROWS rows
-// and pick the row count that yields the largest swatch — that way the
-// grid wraps automatically when there are too many colors to fit
-// horizontally at a reasonable size (Bestow case).
+// largest 1:2 swatch that still leaves the size chart just above the
+// pinned tech-spec row. A single row of a few wall-tile colors is
+// width-capped, so the largest swatch would sit high on the page and
+// leave a hole under the chart. In that case we take another row of
+// slightly smaller tiles. Very wide color lines still wrap because a
+// single row would make the tiles too narrow (Bestow).
 const MAX_PRIMARY_ROWS = 3;
 
 export function computeSwatchLayout(
   colorCount: number,
   hasDeco: boolean,
 ): SwatchLayout {
-  if (colorCount <= 0) return { width: 0, height: 0, primaryRows: 1, perRow: 0 };
+  if (colorCount <= 0) {
+    return { width: 0, height: 0, primaryRows: 1, perRow: 0, hasDeco };
+  }
 
   const sectionGaps = 2; // swatches→matrix, matrix→footnotes
   const sizeMatrixH = estimateSizeMatrixHeight(colorCount);
@@ -62,30 +88,45 @@ export function computeSwatchLayout(
     BOTTOM_BLOCK_H +
     SAFETY_BUFFER;
   const availV = PAGE_H - fixedV;
+  const specsTop = PAGE_H - BOTTOM_BLOCK_H;
 
-  let best: SwatchLayout = { width: 0, height: 0, primaryRows: 1, perRow: colorCount };
+  const candidates: SwatchLayout[] = [];
+  const seenRows = new Set<number>();
+  for (let requested = 1; requested <= MAX_PRIMARY_ROWS; requested++) {
+    const perRow = Math.ceil(colorCount / requested);
+    const primaryRows = Math.ceil(colorCount / perRow);
+    if (seenRows.has(primaryRows)) continue;
+    seenRows.add(primaryRows);
 
-  for (let primaryRows = 1; primaryRows <= MAX_PRIMARY_ROWS; primaryRows++) {
-    const perRow = Math.ceil(colorCount / primaryRows);
     const visualRows = primaryRows * (hasDeco ? 2 : 1);
     const labelArea = visualRows * SWATCH_LABEL_H;
-    const rowGapTotal = (visualRows - 1) * SWATCH_ROW_GAP;
+    const rowGapTotal = Math.max(0, visualRows - 1) * SWATCH_ROW_GAP;
     const availImagesV = Math.max(0, availV - labelArea - rowGapTotal);
     const maxImageH = Math.floor(availImagesV / visualRows);
-
     const maxImageW = Math.floor(
-      (CONTENT_W - SWATCH_GAP_X * (perRow - 1)) / perRow,
+      (CONTENT_W - SWATCH_GAP_X * Math.max(0, perRow - 1)) / perRow,
     );
-
     // Maintain 1:2 ratio — never distort.
     const w = Math.max(0, Math.min(maxImageW, Math.floor(maxImageH / 2)));
-
-    if (w > best.width) {
-      best = { width: w, height: w * 2, primaryRows, perRow };
-    }
+    candidates.push({
+      width: w,
+      height: w * 2,
+      primaryRows,
+      perRow,
+      hasDeco,
+    });
   }
 
-  return best;
+  const voidBelow = (layout: SwatchLayout) =>
+    specsTop - (sizeMatrixTop(layout) + sizeMatrixH + FOOTNOTES_MAX_H);
+
+  const usable = candidates.filter(
+    (layout) => layout.width >= MIN_SWATCH_W && voidBelow(layout) >= 8,
+  );
+  const tight = usable.filter((layout) => voidBelow(layout) <= MAX_VOID_ABOVE_SPECS);
+  const pool = tight.length > 0 ? tight : usable.length > 0 ? usable : candidates;
+  pool.sort((a, b) => b.width - a.width || a.primaryRows - b.primaryRows);
+  return pool[0];
 }
 
 export function getSwatchLayout(data: BrochureData): SwatchLayout {

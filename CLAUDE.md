@@ -91,7 +91,7 @@ We hit a hallucination incident on 2026-05-19: a PDF URL got parsed as HTML, the
 
 ## PDF rendering
 
-`src/lib/pdf/render.ts` launches Puppeteer (system Chromium on the VPS), navigates to an internal URL that renders the React `<Brochure>` (`/internal/brochure/[id]` for saved products, `/internal/brochure/preview` for the Kendall reference), then calls `page.pdf()`. **Asserts exactly 2 pages** — if the rendered HTML produces 1 or 3+ pages, it throws. The 2-page rule is non-negotiable per the distributor's print process.
+`src/lib/pdf/render.ts` launches Puppeteer (system Chrome on the VPS via `PUPPETEER_EXECUTABLE_PATH`; `@sparticuz/chromium-min` on Vercel when that env var is unset) and prints HTML produced in-process by `src/lib/pdf/document.tsx` (`page.setContent`, not `page.goto`). CSS and DM Sans are inlined; images are data URIs. Chromium never requests the deployment, so nginx basic auth and Vercel Deployment Protection do not apply, and a serverless function does not need anything listening on `127.0.0.1`. **Asserts exactly 2 pages** — if the rendered HTML produces 1 or 3+ pages, it throws. The 2-page rule is non-negotiable per the distributor's print process.
 
 The brochure layout (`src/lib/brochure-layout.ts`) dynamically sizes swatches so the page-2 content fits regardless of color count. **Swatch aspect ratio must stay 1:2** (mimicking 12"×24" tiles); never distort, shrink proportionally.
 
@@ -165,6 +165,7 @@ Puppeteer needs a real Chromium binary. On Ubuntu: `apt install google-chrome-st
 | `SHARED_PASSWORD` | yes (in prod) | Login (NextAuth Credentials) |
 | `NEXTAUTH_SECRET` | yes (in prod) | Session signing |
 | `NEXTAUTH_URL` | yes (in prod) | Cookie domain |
-| `PUPPETEER_EXECUTABLE_PATH` | yes (in prod) | Path to Chromium for PDF render |
+| `PUPPETEER_EXECUTABLE_PATH` | yes on the VPS | Path to system Chrome for PDF render. Leave unset on Vercel. |
+| `CHROMIUM_PACK_URL` | no | Override for the `@sparticuz/chromium-min` pack downloaded on Vercel cold start. Default is the v148.0.0 x64 (or arm64) GitHub release. |
 | `QFB_DATA_DIR` | optional | Override `/var/lib/qfb` data root |
 | `NEXT_PUBLIC_GA_ID` | optional | Google Analytics measurement ID |

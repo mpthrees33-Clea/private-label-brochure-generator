@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && node scripts/build-brochure-css.mjs && next build",
+    "pdf:css": "node scripts/build-brochure-css.mjs",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --import tsx --test src/lib/pdf/origin.test.ts src/lib/scrapers/normalize.test.ts",
+    "test": "node --import tsx --test src/lib/brochure-layout.test.ts src/lib/pdf/inline-images.test.ts src/lib/scrapers/normalize.test.ts",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",

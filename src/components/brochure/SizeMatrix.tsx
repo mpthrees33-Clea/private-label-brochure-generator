@@ -3,6 +3,12 @@ import { sizeAvailable, sizeChartLabel } from "@/lib/scrapers/size-format";
 import { SizeIcon } from "./SizeIcon";
 import { FinishMarker } from "./FinishMarker";
 
+function headingLines(label: string): { primary: string; note: string | null } {
+  const match = label.match(/^(.*\S)\s+(bullnose|deco|mosaic)$/i);
+  if (!match) return { primary: label, note: null };
+  return { primary: match[1], note: match[2].toLowerCase() };
+}
+
 export function SizeMatrix({
   sizes,
   colors,
@@ -18,32 +24,57 @@ export function SizeMatrix({
    *  doesn't override via `finishes`. */
   finishLegend: string[];
 }) {
+  // Six size columns (field + bullnose on a wall line) wrap "bullnose"
+  // into the next line mid-word at 10px. Split the qualifier onto its
+  // own nowrap line and shrink the icons so each column stays readable.
+  const compact = sizes.length >= 6;
   return (
     <div>
       <h3 className="text-[12px] lowercase text-brochure-gray">sizes</h3>
-      <table className="mt-1 w-full border-collapse text-[10px] lowercase leading-tight text-brochure-gray">
+      <table
+        className={`mt-1 w-full border-collapse lowercase leading-tight text-brochure-gray ${
+          compact ? "table-fixed text-[9px]" : "text-[10px]"
+        }`}
+      >
         <thead>
           <tr>
-            <th className="w-[18%]" />
-            {sizes.map((s, i) => (
+            <th className={compact ? "w-[88px]" : "w-[18%]"} />
+            {sizes.map((s, i) => {
+              const label = sizeChartLabel(s);
+              const lines = compact
+                ? headingLines(label)
+                : { primary: label, note: null as string | null };
+              return (
               <th
-                key={`${sizeChartLabel(s)}-${i}`}
-                className="border-b border-brochure-line px-1 pb-1.5 text-center align-bottom font-normal"
+                key={`${label}-${i}`}
+                className={`border-b border-brochure-line pb-1.5 text-center align-bottom font-normal ${
+                  compact ? "px-0.5" : "px-1"
+                }`}
               >
                 <div className="flex flex-col items-center gap-0.5">
-                  <SizeIcon kind={s.iconKind} />
-                  <span>
-                    {sizeChartLabel(s)}
+                  <SizeIcon kind={s.iconKind} compact={compact} />
+                  <span className={compact ? "block whitespace-nowrap leading-none" : undefined}>
+                    {lines.primary}
                     {s.footnoteRef ?? ""}
                   </span>
+                  {lines.note && (
+                    <span
+                      className={`block whitespace-nowrap leading-none ${
+                        compact ? "text-[8px]" : "text-[9px]"
+                      }`}
+                    >
+                      {lines.note}
+                    </span>
+                  )}
                   {s.thickness && (
-                    <span className="text-[9px] text-brochure-muted">
+                    <span className="whitespace-nowrap text-[8px] leading-none text-brochure-muted">
                       {s.thickness}
                     </span>
                   )}
                 </div>
               </th>
-            ))}
+              );
+            })}
           </tr>
         </thead>
         <tbody>

@@ -7,8 +7,8 @@ import {
   BLOCK_DEFAULTS,
   PAGE_W,
   PAGE_H,
-  HEADER_H,
   getSwatchLayout,
+  sizeMatrixTop,
   type SwatchLayout,
 } from "@/lib/brochure-layout";
 import { renderDescription } from "@/lib/brochure-description";
@@ -20,32 +20,13 @@ import { TechSpecsTable } from "./TechSpecsTable";
 import { ContactBlock } from "./ContactBlock";
 import { FinishMarker } from "./FinishMarker";
 
-// Vertical geometry for the page-2 mid-section. Swatches stack into rows
-// then size matrix flows immediately below them. Used to compute a sane
-// DEFAULT y for the sizeMatrix block — once the rep drags it, the
-// override coord wins.
-const PAGE2_TOP = HEADER_H + 12;
-const SECTION_GAP = 8;
-const SWATCH_LABEL_H = 18;
-const SWATCH_ROW_GAP_BETWEEN_ROWS = 8;
-
-function defaultSizeMatrixY(data: BrochureData, swatch: SwatchLayout): number {
-  const hasDeco = data.colors.some((c) => c.decoImageUrl && c.decoImageUrl.trim());
-  const visualRowsPerPrimary = hasDeco ? 2 : 1;
-  const visualRows = swatch.primaryRows * visualRowsPerPrimary;
-  const swatchH =
-    visualRows * (swatch.height + SWATCH_LABEL_H) +
-    Math.max(0, visualRows - 1) * SWATCH_ROW_GAP_BETWEEN_ROWS;
-  return PAGE2_TOP + swatchH + SECTION_GAP;
-}
-
 export function resolveBlockPosition(
   id: BlockId,
   data: BrochureData,
   swatch: SwatchLayout,
 ): BlockPosition & { width: number; page: 1 | 2 } {
   const defaults = BLOCK_DEFAULTS[id];
-  const dynamicY = id === "sizeMatrix" ? defaultSizeMatrixY(data, swatch) : defaults.y;
+  const dynamicY = id === "sizeMatrix" ? sizeMatrixTop(swatch) : defaults.y;
   const override = data.layoutOverrides?.[id];
   return {
     page: defaults.page,
@@ -135,6 +116,7 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
         <ColorSwatchGrid
           colors={data.colors}
           swatchWidth={swatch.width}
+          swatchHeight={swatch.height}
           perRow={swatch.perRow}
         />
       </Block>

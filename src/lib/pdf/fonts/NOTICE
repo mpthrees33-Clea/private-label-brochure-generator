@@ -1,0 +1,3 @@
+DM Sans (latin, weights 400/500/600/700), SIL Open Font License 1.1.
+Vendored from fontsource so brochure PDFs can embed the faces without a
+network request. https://github.com/fontsource/font-files
