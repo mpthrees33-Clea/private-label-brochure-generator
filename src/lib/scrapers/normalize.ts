@@ -16,7 +16,9 @@ import {
   type ParsedSize,
 } from "./size-format";
 import type { ScrapedColor, ScrapedProduct, ScrapedSize } from "./types";
-import { isJunkImage, largerTwinUrl } from "../image-sniff";
+import { upgradeImageUrl } from "../image-url";
+import { isJunkImage } from "../image-sniff";
+import { nominalAspectRatio } from "../swatch-geometry";
 
 export interface FinalizeContext {
   catalog?: PageCatalog | null;
@@ -97,6 +99,7 @@ export function finalizeScrapedProduct(
     name: c.name.trim(),
     imageUrl: cleanImageUrl(c.imageUrl),
     decoImageUrl: c.decoImageUrl ? cleanImageUrl(c.decoImageUrl) : undefined,
+    faces: c.faces?.map((face) => ({ ...face, imageUrl: cleanImageUrl(face.imageUrl) })),
   }));
   return next;
 }
@@ -263,18 +266,65 @@ function colorsFromCatalog(catalog: PageCatalog): ScrapedColor[] {
       const key = swatch.name.toLowerCase();
       let color = byKey.get(key);
       if (!color) {
-        color = { name: swatch.name, imageUrl: "" };
+        color = { name: swatch.name, imageUrl: "", faces: [] };
         byKey.set(key, color);
         order.push(key);
       }
-      if (group.isDeco || swatch.isDeco) {
-        if (!color.decoImageUrl) color.decoImageUrl = swatch.imageUrl;
-      } else if (!color.imageUrl) {
-        color.imageUrl = swatch.imageUrl;
-      }
+      const parsed = parseSizeLabel(swatch.sizeRaw);
+      addFace(color, {
+        imageUrl: swatch.imageUrl,
+        finish: swatch.finish,
+        sizeLabel: parsed && parsed.widthIn > 0 ? parsed.label : swatch.sizeRaw || null,
+        widthIn: parsed && parsed.widthIn > 0 ? parsed.widthIn : null,
+        heightIn: parsed && parsed.heightIn > 0 ? parsed.heightIn : null,
+        photoWidth: swatch.photoWidth ?? null,
+        photoHeight: swatch.photoHeight ?? null,
+        isDeco: group.isDeco || swatch.isDeco || Boolean(parsed?.isDeco),
+      });
     }
   }
-  return order.map((k) => byKey.get(k)!).filter((c) => c.imageUrl || c.decoImageUrl);
+  for (const color of byKey.values()) {
+    sortFaces(color);
+    syncPrimaryImages(color);
+  }
+  return order
+    .map((k) => byKey.get(k)!)
+    .filter((c) => c.imageUrl || c.decoImageUrl || (c.faces && c.faces.length > 0));
+}
+
+function addFace(color: ScrapedColor, face: NonNullable<ScrapedColor["faces"]>[number]): void {
+  if (!face.imageUrl) return;
+  const faces = color.faces ?? [];
+  const path = face.imageUrl.split("?")[0];
+  if (faces.some((existing) => existing.imageUrl.split("?")[0] === path)) return;
+  color.faces = [...faces, stampFaceRatio(face)];
+}
+
+function stampFaceRatio(face: NonNullable<ScrapedColor["faces"]>[number]) {
+  const aspectRatio = nominalAspectRatio(face.widthIn, face.heightIn);
+  return {
+    ...face,
+    aspectRatio,
+    sizeUnknown: aspectRatio == null,
+  };
+}
+
+function sortFaces(color: ScrapedColor): void {
+  if (!color.faces || color.faces.length < 2) return;
+  const rank = (face: NonNullable<ScrapedColor["faces"]>[number]) => {
+    if (face.isDeco || face.finish === "deep glaze") return 0;
+    if (face.widthIn && face.heightIn && face.heightIn / face.widthIn < 1.2) return 1;
+    return 2;
+  };
+  color.faces = [...color.faces].sort((a, b) => rank(a) - rank(b));
+}
+
+function syncPrimaryImages(color: ScrapedColor): void {
+  const faces = color.faces ?? [];
+  const field = faces.find((face) => !face.isDeco) ?? faces[0];
+  const deco = faces.find((face) => face.isDeco);
+  if (field && !color.imageUrl) color.imageUrl = field.imageUrl;
+  if (deco && !color.decoImageUrl) color.decoImageUrl = deco.imageUrl;
 }
 
 function applyParsedSizes(product: ScrapedProduct): void {
@@ -708,7 +758,15 @@ function stripColorNoise(product: ScrapedProduct): void {
   for (const color of product.colors) {
     const name = rename(color.name);
     const key = name.toLowerCase();
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      const existing = colors.find((item) => item.name.toLowerCase() === key);
+      if (existing) {
+        for (const face of color.faces ?? []) addFace(existing, face);
+        if (color.imageUrl) addFace(existing, { imageUrl: color.imageUrl, isDeco: false });
+        syncPrimaryImages(existing);
+      }
+      continue;
+    }
     seen.add(key);
     colors.push({ ...color, name });
   }
@@ -850,7 +908,7 @@ function splitFinish(name: string): { stem: string; finish: string | null } {
 
 function sizeLabelFromUrl(url: string): string | null {
   const file = (url || "").split("?")[0];
-  const match = file.match(/(\d+(?:_\d{1,2})?)[x×](\d+(?:_\d{1,2})?)(?!\d)/i);
+  const match = file.match(/(\d{1,2}(?:_\d)?)[x×](\d{1,3})(?!\d)/i);
   if (!match) return null;
   const a = Number(match[1].replace("_", "."));
   const b = Number(match[2].replace("_", "."));
@@ -902,11 +960,36 @@ function collapseFinishVariants(product: ScrapedProduct): void {
       items.find((item) => sizeLabelFromUrl(item.color.imageUrl)) ??
       items.find((item) => item.color.imageUrl) ??
       items[0];
-    colors.push({
+    const merged: ScrapedColor = {
       name: stem,
       imageUrl: swatch.color.imageUrl,
       decoImageUrl: items.map((item) => item.color.decoImageUrl).find(Boolean),
-    });
+      faces: [],
+    };
+    for (const item of items) {
+      for (const face of item.color.faces ?? []) addFace(merged, { ...face, finish: face.finish ?? item.finish });
+      if (item.color.imageUrl) {
+        const fromUrl = sizeLabelFromUrl(item.color.imageUrl);
+        const parsed = fromUrl ? parseSizeLabel(fromUrl) : null;
+        addFace(merged, {
+          imageUrl: item.color.imageUrl,
+          finish: item.finish,
+          sizeLabel: fromUrl,
+          widthIn: parsed?.widthIn ?? null,
+          heightIn: parsed?.heightIn ?? null,
+          isDeco: false,
+        });
+      }
+      if (item.color.decoImageUrl) {
+        addFace(merged, {
+          imageUrl: item.color.decoImageUrl,
+          finish: item.finish,
+          isDeco: true,
+        });
+      }
+    }
+    syncPrimaryImages(merged);
+    colors.push(merged);
     for (const finish of finishes) legend.add(finish);
     for (const item of items) {
       delete availability[item.color.name];
@@ -997,9 +1080,7 @@ function stripEmpty(specs: Partial<ScrapedProduct["techSpecs"]>): Partial<Scrape
 }
 
 export function cleanImageUrl(url: string): string {
-  const trimmed = (url || "").trim();
-  if (!trimmed) return "";
-  return largerTwinUrl(trimmed) ?? trimmed;
+  return upgradeImageUrl(url);
 }
 
 export function imageCandidatesForColor(

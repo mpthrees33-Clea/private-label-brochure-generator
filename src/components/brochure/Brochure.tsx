@@ -117,13 +117,7 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
         tagline={data.trinityTagline}
       />
       <Block id="swatches" pos={swatchesPos}>
-        <ColorSwatchGrid
-          colors={data.colors}
-          swatchWidth={swatch.width}
-          swatchHeight={swatch.height}
-          perRow={swatch.perRow}
-          labelHeight={swatch.labelHeight}
-        />
+        <ColorSwatchGrid colors={data.colors} sizes={data.sizes} layout={swatch} />
       </Block>
       <Block id="sizeMatrix" pos={sizeMatrixPos}>
         <SizeMatrix

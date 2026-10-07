@@ -1,0 +1,125 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import type { BrochureColor } from "./brochure-types";
+import { parseSizeLabel } from "./scrapers/size-format";
+import { nominalAspectRatio, resolveSwatchFaces, swatchFit } from "./swatch-geometry";
+
+function ratioOf(label: string): number | null {
+  const parsed = parseSizeLabel(label);
+  if (!parsed) return null;
+  return nominalAspectRatio(parsed.widthIn, parsed.heightIn);
+}
+
+describe("nominal size to frame ratio", () => {
+  it("parses inches, centimeters, and both multiply signs", () => {
+    assert.equal(ratioOf('8"x8"'), 1);
+    assert.equal(ratioOf("20x20"), 1);
+    assert.equal(ratioOf("20×20 cm"), 1);
+    assert.equal(ratioOf("7.5x40"), nominalAspectRatio(3, 16));
+    assert.equal(ratioOf("7.5×40cm"), nominalAspectRatio(3, 16));
+    assert.equal(ratioOf('3"x16"'), nominalAspectRatio(3, 16));
+    assert.equal(ratioOf("4x16"), 0.25);
+    assert.equal(ratioOf('12"x24"'), 0.5);
+    assert.equal(ratioOf("4x4 mosaic"), 1);
+    assert.equal(ratioOf('4"x4" mosaic (12"x12" sheet)'), 1);
+    assert.equal(ratioOf("670x210"), null);
+  });
+
+  it("does not let a wide factory crop change a square or a plank", () => {
+    assert.equal(nominalAspectRatio(8, 8), 1);
+    assert.equal(nominalAspectRatio(3, 16), nominalAspectRatio(3, 16));
+    assert.ok((nominalAspectRatio(3, 16) ?? 0) > 1);
+    assert.equal(nominalAspectRatio(4, 16), 0.25);
+    assert.equal(nominalAspectRatio(12, 24), 0.5);
+    assert.equal(nominalAspectRatio(undefined, undefined), null);
+  });
+
+  it("stores a square deco and a long plank on one color", () => {
+    const color: BrochureColor = {
+      trinityName: "au 10 puro",
+      imageUrl: "https://cdn.example/puro-field.jpg",
+      faces: [
+        {
+          imageUrl: "https://cdn.example/puro-20x20.jpg",
+          finish: "deep glaze",
+          widthIn: 8,
+          heightIn: 8,
+          aspectRatio: 1,
+          photoWidth: 670,
+          photoHeight: 210,
+        },
+        {
+          imageUrl: "https://cdn.example/puro-7-5x40.jpg",
+          finish: "glossy",
+          widthIn: 3,
+          heightIn: 16,
+          aspectRatio: nominalAspectRatio(3, 16),
+          photoWidth: 670,
+          photoHeight: 210,
+        },
+        {
+          imageUrl: "https://cdn.example/puro-matt.jpg",
+          finish: "matte",
+          widthIn: 3,
+          heightIn: 16,
+          aspectRatio: nominalAspectRatio(3, 16),
+          photoWidth: 670,
+          photoHeight: 210,
+        },
+      ],
+    };
+    const faces = resolveSwatchFaces(color);
+    assert.equal(faces.length, 3);
+    assert.equal(faces[0].ratio, 1);
+    assert.equal(faces[0].sizeUnknown, false);
+    assert.ok(faces[1].ratio > 1);
+    assert.equal(faces[1].ratio, faces[2].ratio);
+    assert.equal(faces[0].caption.includes("deep glaze"), true);
+    assert.equal(faces[1].caption, "glossy");
+  });
+
+  it("marks a swatch size unknown instead of using a 1:2 frame", () => {
+    const faces = resolveSwatchFaces({
+      trinityName: "zelton",
+      imageUrl: "https://cdn.example/zelton.jpg",
+      faces: [{ imageUrl: "https://cdn.example/zelton.jpg", sizeUnknown: true, aspectRatio: null }],
+    });
+    assert.equal(faces[0].sizeUnknown, true);
+    assert.equal(faces[0].ratio, 1);
+    assert.notEqual(faces[0].ratio, 0.5);
+  });
+
+  it("contains a wide factory crop and crops a photo that already matches the tile", () => {
+    assert.equal(swatchFit(1, 670, 210), "contain");
+    assert.equal(swatchFit(16 / 3, 670, 210), "contain");
+    assert.equal(swatchFit(0.25, 400, 1600), "cover");
+    assert.equal(swatchFit(2, 1080, 540), "cover");
+    assert.equal(swatchFit(1, null, null, true), "contain");
+  });
+
+  it("does not treat a trapezoid face as the chart's 4x4", () => {
+    const faces = resolveSwatchFaces(
+      {
+        trinityName: "alabaster",
+        imageUrl: "https://cdn.example/4x4.jpg",
+        faces: [
+          { imageUrl: "https://cdn.example/4x4.jpg", widthIn: 4, heightIn: 4, aspectRatio: 1 },
+          { imageUrl: "https://cdn.example/trap.jpg", sizeUnknown: true, aspectRatio: null },
+        ],
+      },
+      [{ label: '4"x4"', iconKind: "square" }],
+    );
+    assert.equal(faces[1].sizeUnknown, true);
+    assert.equal(faces[1].ratio, 1);
+  });
+
+  it("uses a listed 4x4 when the color has no stored face", () => {
+    const faces = resolveSwatchFaces(
+      { trinityName: "zelton", imageUrl: "" },
+      [{ label: '4"x4"', iconKind: "square" }],
+    );
+    assert.equal(faces[0].imageUrl, "");
+    assert.equal(faces[0].ratio, 1);
+    assert.equal(faces[0].sizeUnknown, false);
+  });
+});

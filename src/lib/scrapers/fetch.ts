@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { bestImageUrl, urlsFromSrcset } from "../image-url";
 
 export interface FetchedAnchor {
   url: string;
@@ -47,15 +48,16 @@ export async function fetchAndCleanPage(url: string, html: string): Promise<Fetc
   ).remove();
   $("[hidden], [aria-hidden=true]").remove();
 
-  // og:image is often the only room-scene hero, and it lives in <meta>,
-  // which we strip below. Promote it to a real <img> first.
+  // og:image often lives in <meta>, which we strip below. Keep it as a
+  // lead photo. It is not automatically the hero — a wide room scene
+  // where the tile is only the background should lose to a closer shot.
   const ogImage =
     $('meta[property="og:image"]').attr("content") ||
     $('meta[name="og:image"]').attr("content");
   if (ogImage) {
     try {
       const absolute = new URL(ogImage, url).toString();
-      $("body").prepend(`<img src="${absolute}" alt="room scene hero">`);
+      $("body").prepend(`<img src="${absolute}" alt="lead image">`);
     } catch {
       // ignore unparseable og:image
     }
@@ -82,22 +84,15 @@ export async function fetchAndCleanPage(url: string, html: string): Promise<Fetc
   // entry is often a small crop, not the high-res file.
   $("img").each((_, el) => {
     const $img = $(el);
-    const srcsetBest =
-      bestUrlFromSrcset($img.attr("srcset")) ||
-      bestUrlFromSrcset($img.attr("data-srcset")) ||
-      bestUrlFromSrcset($img.attr("data-lazy-srcset"));
-    const lazy =
-      $img.attr("data-src") ||
-      $img.attr("data-lazy-src") ||
-      $img.attr("data-original") ||
-      "";
-    const rawSrc = $img.attr("src") || "";
-    const src =
-      (rawSrc && !isPlaceholderSrc(rawSrc) ? rawSrc : "") ||
-      (lazy && !isPlaceholderSrc(lazy) ? lazy : "") ||
-      srcsetBest ||
-      rawSrc ||
-      lazy;
+    const src = bestImageUrl([
+      $img.attr("src"),
+      $img.attr("data-src"),
+      $img.attr("data-lazy-src"),
+      $img.attr("data-original"),
+      ...urlsFromSrcset($img.attr("srcset")),
+      ...urlsFromSrcset($img.attr("data-srcset")),
+      ...urlsFromSrcset($img.attr("data-lazy-srcset")),
+    ]);
     const alt = $img.attr("alt") || "";
     if (!src) {
       $img.remove();

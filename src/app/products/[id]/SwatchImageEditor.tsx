@@ -276,6 +276,13 @@ export function SwatchImageEditor({
                 <div className="mb-2 flex items-center gap-2">
                   <span className="text-[11px] uppercase tracking-wider text-fg-faint">color</span>
                   <span className="font-semibold lowercase text-fg">{c.trinityName}</span>
+                  {(c.faces ?? []).some(
+                    (face) =>
+                      face.sizeUnknown ||
+                      (!(face.aspectRatio && face.aspectRatio > 0) && !(face.widthIn && face.heightIn)),
+                  ) && (
+                      <span className="text-[11px] font-medium text-amber-700">size unknown</span>
+                    )}
                 </div>
                 <SwatchRow
                   label="main swatch"
@@ -468,15 +475,19 @@ function SwatchRow({
   return (
     <div className="mt-1.5">
       <div className="flex items-center gap-2">
-        <div className="h-10 w-5 shrink-0 overflow-hidden rounded-xs border border-divider bg-[#f3f3f3]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xs border border-divider bg-[#f3f3f3]">
           {hasCurrent ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={proxyImageUrl(current)}
               alt=""
-              className="h-full w-full object-cover"
+              className="max-h-full max-w-full object-contain"
             />
-          ) : null}
+          ) : (
+            <span className="px-0.5 text-center text-[8px] uppercase leading-tight text-fg-faint">
+              no photo
+            </span>
+          )}
         </div>
         <input
           type="url"

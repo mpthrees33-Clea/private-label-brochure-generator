@@ -19,10 +19,26 @@ export interface TechSpecs {
   slipResistance?: string;
 }
 
+/** One photographed finish or format of a color. */
+export interface ScrapedFace {
+  imageUrl: string;
+  finish?: string | null;
+  sizeLabel?: string | null;
+  widthIn?: number | null;
+  heightIn?: number | null;
+  /** Frame width ÷ height stored at scrape time from the nominal size. */
+  aspectRatio?: number | null;
+  sizeUnknown?: boolean;
+  photoWidth?: number | null;
+  photoHeight?: number | null;
+  isDeco?: boolean;
+}
+
 export interface ScrapedColor {
   name: string;
   imageUrl: string;
   decoImageUrl?: string;
+  faces?: ScrapedFace[];
 }
 
 export interface ScrapedSize {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchRemoteImage, isDeniedImageHost } from "@/lib/image-fetch";
 import { sniffImageMime } from "@/lib/image-sniff";
+import { upgradeImageUrl } from "@/lib/image-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const buf = await fetchRemoteImage(parsed.toString());
+    const buf = await fetchRemoteImage(upgradeImageUrl(parsed.toString()));
     if (!buf) {
       return NextResponse.json({ error: "Upstream image fetch failed" }, { status: 502 });
     }
