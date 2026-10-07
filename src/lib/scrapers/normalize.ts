@@ -16,7 +16,9 @@ import {
   type ParsedSize,
 } from "./size-format";
 import type { ScrapedColor, ScrapedProduct, ScrapedSize } from "./types";
-import { isJunkImage, largerTwinUrl } from "../image-sniff";
+import { upgradeImageUrl } from "../image-url";
+import { isJunkImage } from "../image-sniff";
+import { nominalAspectRatio } from "../swatch-geometry";
 
 export interface FinalizeContext {
   catalog?: PageCatalog | null;
@@ -71,6 +73,7 @@ export function finalizeScrapedProduct(
     const listed = extractListedFormats(pageHtml);
     const split = splitSpecialPieces(pageHtml, listed);
     applyListedFormats(next, split.formats, Boolean(catalog && catalog.groups.length > 0));
+    dropUnlistedChipFields(next, split.formats);
     const onChart = new Set(next.sizes.map((size) => sizeChartLabel(size).toLowerCase()));
     next.specialPieces = split.specials.filter((label) => !onChart.has(label.toLowerCase()));
     applySharedAvailability(next, pageHtml);
@@ -97,8 +100,26 @@ export function finalizeScrapedProduct(
     name: c.name.trim(),
     imageUrl: cleanImageUrl(c.imageUrl),
     decoImageUrl: c.decoImageUrl ? cleanImageUrl(c.decoImageUrl) : undefined,
+    faces: c.faces?.map((face) => ({ ...face, imageUrl: cleanImageUrl(face.imageUrl) })),
   }));
+  applyMosaicSheetFaces(next);
   return next;
+}
+
+/** A trapezoid mosaic is sold as a sheet. That sheet is the nominal size. */
+function applyMosaicSheetFaces(product: ScrapedProduct): void {
+  const size = product.sizes.find((item) => /trapezoid/i.test(item.label) && item.sheetLabel);
+  if (!size?.sheetLabel) return;
+  const parsed = parseSizeLabel(size.sheetLabel);
+  if (!parsed || parsed.widthIn <= 0 || parsed.heightIn <= 0) return;
+  for (const color of product.colors) {
+    if (!color.faces) continue;
+    color.faces = color.faces.map((face) => {
+      if (!/trapez|trapes/i.test(face.imageUrl || "")) return face;
+      if (face.widthIn && face.heightIn && face.sizeUnknown === false) return face;
+      return stampFaceRatio({ ...face, widthIn: parsed.widthIn, heightIn: parsed.heightIn });
+    });
+  }
 }
 
 function applyCollectionName(
@@ -263,18 +284,65 @@ function colorsFromCatalog(catalog: PageCatalog): ScrapedColor[] {
       const key = swatch.name.toLowerCase();
       let color = byKey.get(key);
       if (!color) {
-        color = { name: swatch.name, imageUrl: "" };
+        color = { name: swatch.name, imageUrl: "", faces: [] };
         byKey.set(key, color);
         order.push(key);
       }
-      if (group.isDeco || swatch.isDeco) {
-        if (!color.decoImageUrl) color.decoImageUrl = swatch.imageUrl;
-      } else if (!color.imageUrl) {
-        color.imageUrl = swatch.imageUrl;
-      }
+      const parsed = parseSizeLabel(swatch.sizeRaw);
+      addFace(color, {
+        imageUrl: swatch.imageUrl,
+        finish: swatch.finish,
+        sizeLabel: parsed && parsed.widthIn > 0 ? parsed.label : swatch.sizeRaw || null,
+        widthIn: parsed && parsed.widthIn > 0 ? parsed.widthIn : null,
+        heightIn: parsed && parsed.heightIn > 0 ? parsed.heightIn : null,
+        photoWidth: swatch.photoWidth ?? null,
+        photoHeight: swatch.photoHeight ?? null,
+        isDeco: group.isDeco || swatch.isDeco || Boolean(parsed?.isDeco),
+      });
     }
   }
-  return order.map((k) => byKey.get(k)!).filter((c) => c.imageUrl || c.decoImageUrl);
+  for (const color of byKey.values()) {
+    sortFaces(color);
+    syncPrimaryImages(color);
+  }
+  return order
+    .map((k) => byKey.get(k)!)
+    .filter((c) => c.imageUrl || c.decoImageUrl || (c.faces && c.faces.length > 0));
+}
+
+function addFace(color: ScrapedColor, face: NonNullable<ScrapedColor["faces"]>[number]): void {
+  if (!face.imageUrl) return;
+  const faces = color.faces ?? [];
+  const path = face.imageUrl.split("?")[0];
+  if (faces.some((existing) => existing.imageUrl.split("?")[0] === path)) return;
+  color.faces = [...faces, stampFaceRatio(face)];
+}
+
+function stampFaceRatio(face: NonNullable<ScrapedColor["faces"]>[number]) {
+  const aspectRatio = nominalAspectRatio(face.widthIn, face.heightIn);
+  return {
+    ...face,
+    aspectRatio,
+    sizeUnknown: aspectRatio == null,
+  };
+}
+
+function sortFaces(color: ScrapedColor): void {
+  if (!color.faces || color.faces.length < 2) return;
+  const rank = (face: NonNullable<ScrapedColor["faces"]>[number]) => {
+    if (face.isDeco || face.finish === "deep glaze") return 0;
+    if (face.widthIn && face.heightIn && face.heightIn / face.widthIn < 1.2) return 1;
+    return 2;
+  };
+  color.faces = [...color.faces].sort((a, b) => rank(a) - rank(b));
+}
+
+function syncPrimaryImages(color: ScrapedColor): void {
+  const faces = color.faces ?? [];
+  const field = faces.find((face) => !face.isDeco) ?? faces[0];
+  const deco = faces.find((face) => face.isDeco);
+  if (field && !color.imageUrl) color.imageUrl = field.imageUrl;
+  if (deco && !color.decoImageUrl) color.decoImageUrl = deco.imageUrl;
 }
 
 function applyParsedSizes(product: ScrapedProduct): void {
@@ -554,11 +622,24 @@ function applyPrintedFinish(product: ScrapedProduct, sourceText: string): void {
   product.finishLegend = sortFinishes(printed);
 }
 
-function printedFinishes(text: string): string[] {
+const FINISH_TOKEN =
+  "semi[-\\s]?gloss|glossy|gloss|matte|matt|polished|silk|textured|natural|grip|honed|bright";
+
+export function printedFinishes(text: string): string[] {
+  // Spec tables concatenate cell text ("FinishSemi-Gloss"). Split that
+  // join so the finish word is a real token. A marketing phrase like
+  // "glossy depth" is not a finish; "glossy finish" is.
+  const normalized = text.replace(/([a-z])([A-Z])/g, "$1 $2");
+  const labeled = finishesAfterLabel(normalized);
+  if (labeled.length > 0) return labeled;
+  return finishesNamedBefore(normalized);
+}
+
+function finishesAfterLabel(text: string): string[] {
   const found: string[] = [];
   const label = /\bfinish\b\s*[:=]?\s*/gi;
+  const token = new RegExp(`^(?:${FINISH_TOKEN})\\b`, "i");
   let match: RegExpExecArray | null;
-  const token = /^(?:semi[-\s]?gloss|glossy|gloss|matte|matt|polished|silk|textured|natural|grip|honed|bright)\b/i;
   while ((match = label.exec(text))) {
     let rest = text.slice(match.index + match[0].length, match.index + match[0].length + 80);
     let guard = 0;
@@ -572,6 +653,17 @@ function printedFinishes(text: string): string[] {
       rest = rest.slice(hit[0].length);
     }
     if (found.length > 0) break;
+  }
+  return found;
+}
+
+function finishesNamedBefore(text: string): string[] {
+  const found: string[] = [];
+  const named = new RegExp(`\\b(${FINISH_TOKEN})\\s+finish\\b`, "gi");
+  let match: RegExpExecArray | null;
+  while ((match = named.exec(text))) {
+    const canon = canonicalFinish(match[1]);
+    if (canon && !found.includes(canon)) found.push(canon);
   }
   return found;
 }
@@ -708,7 +800,15 @@ function stripColorNoise(product: ScrapedProduct): void {
   for (const color of product.colors) {
     const name = rename(color.name);
     const key = name.toLowerCase();
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      const existing = colors.find((item) => item.name.toLowerCase() === key);
+      if (existing) {
+        for (const face of color.faces ?? []) addFace(existing, face);
+        if (color.imageUrl) addFace(existing, { imageUrl: color.imageUrl, isDeco: false });
+        syncPrimaryImages(existing);
+      }
+      continue;
+    }
     seen.add(key);
     colors.push({ ...color, name });
   }
@@ -812,6 +912,40 @@ function applyListedFormats(
   }
 }
 
+/** A "4x4" column that is only the chip of a listed mosaic is not a loose tile. */
+function dropUnlistedChipFields(product: ScrapedProduct, listed: ListedFormat[]): void {
+  const parsedListed = listed
+    .map((format) => parseSizeLabel(format.raw))
+    .filter((parsed): parsed is ParsedSize => parsed != null && parsed.widthIn > 0);
+  const mosaicChips = parsedListed.filter((parsed) => parsed.piece === "mosaic");
+  if (mosaicChips.length === 0) return;
+  const dropped = new Set<string>();
+  product.sizes = product.sizes.filter((size) => {
+    const parsed = parseSizeLabel(`${size.label}${size.isDeco ? " deco" : ""}`);
+    if (!parsed || parsed.piece === "mosaic" || parsed.isDeco) return true;
+    const twin = mosaicChips.some(
+      (chip) => chip.widthIn === parsed.widthIn && chip.heightIn === parsed.heightIn,
+    );
+    const fieldListed = parsedListed.some(
+      (item) =>
+        item.piece !== "mosaic" &&
+        !item.isDeco &&
+        item.widthIn === parsed.widthIn &&
+        item.heightIn === parsed.heightIn,
+    );
+    if (!twin || fieldListed) return true;
+    dropped.add(sizeChartLabel(size).toLowerCase());
+    dropped.add(parsed.label.toLowerCase());
+    return false;
+  });
+  if (dropped.size === 0) return;
+  const charts = product.sizes.map((size) => sizeChartLabel(size));
+  for (const key of Object.keys(product.availability)) {
+    const kept = (product.availability[key] ?? []).filter((label) => !dropped.has(label.toLowerCase()));
+    product.availability[key] = kept.length > 0 ? kept : charts;
+  }
+}
+
 function sizeKey(size: { label: string; isDeco?: boolean | null }): string {
   const parsed = parseSizeLabel(`${size.label}${size.isDeco ? " deco" : ""}`);
   const label = parsed?.label ?? size.label.toLowerCase();
@@ -850,7 +984,7 @@ function splitFinish(name: string): { stem: string; finish: string | null } {
 
 function sizeLabelFromUrl(url: string): string | null {
   const file = (url || "").split("?")[0];
-  const match = file.match(/(\d+(?:_\d{1,2})?)[x×](\d+(?:_\d{1,2})?)(?!\d)/i);
+  const match = file.match(/(\d{1,2}(?:_\d)?)[x×](\d{1,3})(?!\d)/i);
   if (!match) return null;
   const a = Number(match[1].replace("_", "."));
   const b = Number(match[2].replace("_", "."));
@@ -902,11 +1036,36 @@ function collapseFinishVariants(product: ScrapedProduct): void {
       items.find((item) => sizeLabelFromUrl(item.color.imageUrl)) ??
       items.find((item) => item.color.imageUrl) ??
       items[0];
-    colors.push({
+    const merged: ScrapedColor = {
       name: stem,
       imageUrl: swatch.color.imageUrl,
       decoImageUrl: items.map((item) => item.color.decoImageUrl).find(Boolean),
-    });
+      faces: [],
+    };
+    for (const item of items) {
+      for (const face of item.color.faces ?? []) addFace(merged, { ...face, finish: face.finish ?? item.finish });
+      if (item.color.imageUrl) {
+        const fromUrl = sizeLabelFromUrl(item.color.imageUrl);
+        const parsed = fromUrl ? parseSizeLabel(fromUrl) : null;
+        addFace(merged, {
+          imageUrl: item.color.imageUrl,
+          finish: item.finish,
+          sizeLabel: fromUrl,
+          widthIn: parsed?.widthIn ?? null,
+          heightIn: parsed?.heightIn ?? null,
+          isDeco: false,
+        });
+      }
+      if (item.color.decoImageUrl) {
+        addFace(merged, {
+          imageUrl: item.color.decoImageUrl,
+          finish: item.finish,
+          isDeco: true,
+        });
+      }
+    }
+    syncPrimaryImages(merged);
+    colors.push(merged);
     for (const finish of finishes) legend.add(finish);
     for (const item of items) {
       delete availability[item.color.name];
@@ -997,9 +1156,7 @@ function stripEmpty(specs: Partial<ScrapedProduct["techSpecs"]>): Partial<Scrape
 }
 
 export function cleanImageUrl(url: string): string {
-  const trimmed = (url || "").trim();
-  if (!trimmed) return "";
-  return largerTwinUrl(trimmed) ?? trimmed;
+  return upgradeImageUrl(url);
 }
 
 export function imageCandidatesForColor(

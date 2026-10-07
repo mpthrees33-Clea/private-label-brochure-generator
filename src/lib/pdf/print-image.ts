@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { trimNearWhite } from "@/lib/image-trim";
 
 // Brochure CSS pixels are 96 DPI. 2× that is enough for a sharp Letter
 // print without embedding the factory's full-resolution files.
@@ -13,13 +14,16 @@ export interface PrintSize {
   height?: number;
   /** cover matches object-cover photos. inside keeps logos and the QR. */
   fit: "cover" | "inside";
+  /** Drop uniform white padding before fitting a swatch. */
+  trim?: boolean;
 }
 
 export async function compressForPrint(
   bytes: Buffer,
   size: PrintSize,
 ): Promise<{ bytes: Buffer; contentType: string }> {
-  const meta = await sharp(bytes, { failOn: "none" }).metadata();
+  const source = size.trim ? (await trimNearWhite(bytes)).bytes : bytes;
+  const meta = await sharp(source, { failOn: "none" }).metadata();
   const srcW = meta.width ?? 0;
   const srcH = meta.height ?? 0;
   if (!srcW || !srcH) {
@@ -33,7 +37,7 @@ export async function compressForPrint(
   const uncapped = targetW == null && targetH == null && Math.max(srcW, srcH) > FALLBACK_MAX_EDGE;
   const resize = tooWide || tooTall || uncapped;
 
-  let pipeline = sharp(bytes, { failOn: "none" }).rotate();
+  let pipeline = sharp(source, { failOn: "none" }).rotate();
   if (uncapped) {
     pipeline = pipeline.resize({
       width: srcW >= srcH ? FALLBACK_MAX_EDGE : undefined,
@@ -60,15 +64,15 @@ export async function compressForPrint(
   const keepPng = size.fit === "inside" || Boolean(meta.hasAlpha);
   if (keepPng) {
     const out = await pipeline.png({ compressionLevel: 9 }).toBuffer();
-    if (!resize && out.length >= bytes.length) {
-      return assertPrintable({ bytes, contentType: "image/png" });
+    if (!resize && out.length >= source.length) {
+      return assertPrintable({ bytes: source, contentType: "image/png" });
     }
     return assertPrintable({ bytes: out, contentType: "image/png" });
   }
 
   const out = await pipeline.jpeg({ quality: JPEG_QUALITY, mozjpeg: true }).toBuffer();
-  if (!resize && meta.format === "jpeg" && out.length >= bytes.length) {
-    return assertPrintable({ bytes, contentType: "image/jpeg" });
+  if (!resize && meta.format === "jpeg" && out.length >= source.length) {
+    return assertPrintable({ bytes: source, contentType: "image/jpeg" });
   }
   return assertPrintable({ bytes: out, contentType: "image/jpeg" });
 }

@@ -68,7 +68,8 @@ function parseImages(html: string): ImgRef[] {
     const width = attrNumber(tag, "data-print-w");
     const height = attrNumber(tag, "data-print-h");
     const fit = /\bdata-print-fit="cover"/.test(tag) ? "cover" : "inside";
-    out.push({ src: decodeHtml(srcMatch[1]), size: { width, height, fit } });
+    const trim = /\bdata-print-trim="1"/.test(tag);
+    out.push({ src: decodeHtml(srcMatch[1]), size: { width, height, fit, trim } });
   }
   return out;
 }

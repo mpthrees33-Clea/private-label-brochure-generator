@@ -1,4 +1,5 @@
-import { isJunkImage, largerTwinUrl, sniffImageMime } from "../image-sniff";
+import { upgradeImageUrl } from "../image-url";
+import { isJunkImage, sniffImageMime } from "../image-sniff";
 import type { PageCatalog } from "./catalog";
 import type { ScrapedProduct } from "./types";
 
@@ -43,7 +44,7 @@ async function pickWorking(urls: string[]): Promise<string> {
   const expanded: string[] = [];
   for (const url of urls) {
     if (!url || isJunkImage(url)) continue;
-    const larger = largerTwinUrl(url);
+    const larger = upgradeImageUrl(url);
     if (larger) expanded.push(larger);
     if (!expanded.includes(url)) expanded.push(url);
   }

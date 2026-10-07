@@ -92,21 +92,25 @@ export function MissingFieldsPanel({
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
             <div className="flex-1">
               <p className="font-semibold text-amber-200">
-                Download is still available. Technical specifications are incomplete.
+                {warnings.every((warning) => warning === "tech-specs")
+                  ? "Download is still available. Technical specifications are incomplete."
+                  : "Download is still available. Review these before sending the sheet:"}
               </p>
               <ul className="mt-1 list-disc pl-5 text-fg-muted">
                 {warnings.map((m) => (
                   <li key={m}>{MISSING_FIELD_LABELS[m]}</li>
                 ))}
               </ul>
-              <p className="mt-2 text-[11px] text-fg-muted">
-                The specs table is left off the PDF until four values are filled.
-                Add them in{" "}
-                <Link href={`/products/${productId}/edit`} className="text-accent hover:underline">
-                  Edit fields
-                </Link>
-                , or paste a spec-sheet URL below.
-              </p>
+              {warnings.includes("tech-specs") && (
+                <p className="mt-2 text-[11px] text-fg-muted">
+                  The specs table is left off the PDF until four values are filled.
+                  Add them in{" "}
+                  <Link href={`/products/${productId}/edit`} className="text-accent hover:underline">
+                    Edit fields
+                  </Link>
+                  , or paste a spec-sheet URL below.
+                </p>
+              )}
             </div>
           </div>
         </div>

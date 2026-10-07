@@ -10,7 +10,8 @@ import {
   Camera,
   Loader2,
 } from "lucide-react";
-import type { BrochureColor } from "@/lib/brochure-types";
+import type { BrochureColor, BrochureSize } from "@/lib/brochure-types";
+import { facePhotoMismatch, resolveSwatchFaces } from "@/lib/swatch-geometry";
 import { proxyImageUrl } from "@/lib/image-proxy";
 import {
   detectSwatchPattern,
@@ -30,9 +31,11 @@ import { recordLesson } from "@/lib/record-lesson";
 export function SwatchImageEditor({
   productId,
   colors,
+  sizes = [],
 }: {
   productId: string;
   colors: BrochureColor[];
+  sizes?: BrochureSize[];
 }) {
   const router = useRouter();
   const missingCount = colors.filter((c) => !c.imageUrl || c.imageUrl.trim() === "").length;
@@ -276,6 +279,14 @@ export function SwatchImageEditor({
                 <div className="mb-2 flex items-center gap-2">
                   <span className="text-[11px] uppercase tracking-wider text-fg-faint">color</span>
                   <span className="font-semibold lowercase text-fg">{c.trinityName}</span>
+                  {resolveSwatchFaces(c, sizes).some((face) => face.sizeUnknown) && (
+                      <span className="text-[11px] font-medium text-amber-700">size unknown</span>
+                    )}
+                  {(c.faces ?? []).some((face) => facePhotoMismatch(face)) && (
+                    <span className="text-[11px] font-medium text-amber-700">
+                      photo shape doesn&apos;t match tile size
+                    </span>
+                  )}
                 </div>
                 <SwatchRow
                   label="main swatch"
@@ -468,15 +479,19 @@ function SwatchRow({
   return (
     <div className="mt-1.5">
       <div className="flex items-center gap-2">
-        <div className="h-10 w-5 shrink-0 overflow-hidden rounded-xs border border-divider bg-[#f3f3f3]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xs border border-divider bg-[#f3f3f3]">
           {hasCurrent ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={proxyImageUrl(current)}
               alt=""
-              className="h-full w-full object-cover"
+              className="max-h-full max-w-full object-contain"
             />
-          ) : null}
+          ) : (
+            <span className="px-0.5 text-center text-[8px] uppercase leading-tight text-fg-faint">
+              no photo
+            </span>
+          )}
         </div>
         <input
           type="url"

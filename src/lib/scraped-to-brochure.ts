@@ -18,6 +18,18 @@ export function scrapedToBrochure(
       trinityName: c.name.toLowerCase(),
       imageUrl: c.imageUrl,
       decoImageUrl: c.decoImageUrl ?? null,
+      faces: c.faces?.map((face) => ({
+        imageUrl: face.imageUrl,
+        finish: face.finish ?? null,
+        widthIn: face.widthIn ?? null,
+        heightIn: face.heightIn ?? null,
+        aspectRatio: face.aspectRatio ?? null,
+        sizeUnknown: face.sizeUnknown ?? face.aspectRatio == null,
+        photoWidth: face.photoWidth ?? null,
+        photoHeight: face.photoHeight ?? null,
+        photoMismatch: face.photoMismatch ?? false,
+        isDeco: face.isDeco ?? false,
+      })),
     })),
     sizes: p.sizes.map((s) => ({
       label: s.label,

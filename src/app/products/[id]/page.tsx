@@ -14,6 +14,7 @@ import { MissingFieldsPanel } from "./MissingFieldsPanel";
 import { SwatchImageEditor } from "./SwatchImageEditor";
 import { HeroImageEditor } from "./HeroImageEditor";
 import { brochurePdfFilename } from "@/lib/pdf/filename";
+import { withScrapedFinish } from "@/lib/finish-legend-server";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,7 @@ export default async function ProductDetailPage({
   // Compose factory-learned layout defaults UNDER this product's own
   // overrides. Per-product positions always win — factory defaults only
   // fill in blocks the rep hasn't touched yet on this specific product.
-  const productForEditor = await withFactoryLayoutDefaults(product);
+  const productForEditor = await withScrapedFinish(await withFactoryLayoutDefaults(product));
   const canDownload = missing.length === 0;
   const needsRename = product.trinityName === "rename-me";
 
@@ -110,7 +111,7 @@ export default async function ProductDetailPage({
 
       <MissingFieldsPanel productId={product.id} missing={missing} warnings={warnings} />
       <HeroImageEditor productId={product.id} currentUrl={product.heroImageUrl} />
-      <SwatchImageEditor productId={product.id} colors={product.colors} />
+      <SwatchImageEditor productId={product.id} colors={product.colors} sizes={product.sizes} />
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <div className="w-full min-w-0 lg:w-auto lg:shrink-0">

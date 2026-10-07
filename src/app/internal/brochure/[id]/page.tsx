@@ -4,6 +4,7 @@ import { Brochure } from "@/components/brochure/Brochure";
 import { getProduct } from "@/lib/store/products";
 import { withFactoryLayoutDefaults } from "@/lib/store/factory-layout-defaults";
 import { brochurePdfFilename } from "@/lib/pdf/filename";
+import { withScrapedFinish } from "@/lib/finish-legend-server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -22,7 +23,7 @@ export default async function SavedBrochurePage({
   // Match the editor view: factory-learned defaults compose UNDER the
   // product's own overrides. This keeps the on-screen brochure identical
   // to the PDF, which renders the same component in memory.
-  const productWithDefaults = await withFactoryLayoutDefaults(product);
+  const productWithDefaults = await withScrapedFinish(await withFactoryLayoutDefaults(product));
 
   return (
     <>

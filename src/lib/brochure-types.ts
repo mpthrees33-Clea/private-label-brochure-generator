@@ -6,10 +6,28 @@ import type { SizeIcon, TechSpecs } from "./scrapers/types";
 
 export type { SizeIcon, TechSpecs };
 
+/** One factory photo of a color: a finish, a format, or a deco face. */
+export interface BrochureFace {
+  imageUrl: string;
+  finish?: string | null;
+  widthIn?: number | null;
+  heightIn?: number | null;
+  /** Frame width ÷ height from the nominal size. Null when the size is unknown. */
+  aspectRatio?: number | null;
+  sizeUnknown?: boolean;
+  photoWidth?: number | null;
+  photoHeight?: number | null;
+  /** The photo's shape does not match the nominal tile. Shown contained. */
+  photoMismatch?: boolean;
+  isDeco?: boolean;
+}
+
 export interface BrochureColor {
   trinityName: string;
   imageUrl: string;
   decoImageUrl?: string | null;
+  /** Every finish and format the factory pictured. Falls back to imageUrl. */
+  faces?: BrochureFace[];
 }
 
 export interface BrochureSize {

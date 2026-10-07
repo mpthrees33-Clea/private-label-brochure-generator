@@ -296,6 +296,25 @@ describe("listed factory formats", () => {
       '4"x4" mosaic (12"x12" sheet)',
       'trapezoid mosaic (12"x12" sheet)',
     ]);
+
+    const withLooseChip = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Atlas",
+        factoryUrl: "https://style-access.com/atlas/",
+        sizes: [
+          { label: '4"x4"', iconKind: "square" },
+          { label: "4x4 mosaic", iconKind: "mosaic" },
+          { label: "trapezoid mosaic", iconKind: "mosaic" },
+        ],
+        colors: [{ name: "Alabaster", imageUrl: "https://cdn.example/alabaster.jpg" }],
+        availability: { Alabaster: ['4"x4"', "4x4 mosaic", "trapezoid mosaic"] },
+      }),
+      { pageHtml: ATLAS_HTML, pageTitle: "Atlas", sourceText: "Atlas mosaics" },
+    );
+    assert.equal(
+      withLooseChip.sizes.some((size) => size.label === '4"x4"' && !/mosaic/i.test(size.label)),
+      false,
+    );
     assert.equal(product.techSpecs.thickness, "9mm");
     assert.equal(product.techSpecs.shadeVariation, "v3");
     assert.equal(product.techSpecs.waterAbsorption, "> 15%");
@@ -723,6 +742,34 @@ describe("trims and shared mosaics", () => {
     assert.match(product.footnotes[0], /please reference tcna for more information/i);
   });
 
+  it("reads a finish glued to the spec label and a glossy finish phrase", () => {
+    const atlas = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Atlas",
+        finishLegend: ["matte"],
+        colors: [{ name: "Alabaster", imageUrl: "https://cdn.example/alabaster.jpg" }],
+      }),
+      {
+        pageTitle: "Atlas",
+        sourceText: "soft variation, glossy depth, and handcrafted character. CeramicFinishSemi-Gloss Semi-GlossEdge",
+      },
+    );
+    assert.deepEqual(atlas.finishLegend, ["semi-gloss"]);
+
+    const watercolor = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Watercolor",
+        finishLegend: ["matte"],
+        colors: [{ name: "Denim", imageUrl: "https://cdn.example/denim.jpg" }],
+      }),
+      {
+        pageTitle: "Watercolor",
+        sourceText: "The format is 4 x 16, and it has a glossy finish, adding a touch of modernity.",
+      },
+    );
+    assert.deepEqual(watercolor.finishLegend, ["glossy"]);
+  });
+
   it("does not show a deco swatch when the deco is only a special piece", () => {
     const html = `<p>30x30 cm 12" x 12" Deco</p>`;
     const product = finalizeScrapedProduct(
@@ -742,5 +789,122 @@ describe("trims and shared mosaics", () => {
     assert.equal(product.colors[0].decoImageUrl, undefined);
     assert.equal(product.sizes.some((size) => size.isDeco), false);
     assert.ok((product.specialPieces ?? []).some((piece) => /deco/i.test(piece)));
+  });
+});
+
+describe("factory face photos", () => {
+  it("keeps every Aura finish and sizes the slot from the tile, not a 1:2 crop", () => {
+    const html = `<!doctype html><html><head>
+      <title>Aura</title>
+      <meta property="og:image" content="https://www.delconcausa.com/cdn/shop/files/Aura_Eucalyptus_Desert_Bathroom_1600x1200_b.jpg?width=670" />
+      <meta property="og:image:width" content="1600" />
+      <meta property="og:image:height" content="1200" />
+    </head><body>
+      <h1>Aura</h1>
+      <img src="https://www.delconcausa.com/cdn/shop/files/Aura_Puro_Slate_Bathroom_1080.jpg" width="872" height="1080" alt="" />
+      <label class="media-swatch"><span class="sr-only">AU 10 Puro Deep Glaze</span>
+        <img src="https://www.delconcausa.com/cdn/shop/files/Aura_Puro_20x20_b.jpg?width=670" width="670" height="210" alt="Aura" />
+      </label>
+      <label class="media-swatch"><span class="sr-only">AU 10 Puro Glossy</span>
+        <img src="https://www.delconcausa.com/cdn/shop/files/Aura_Puro_7_5x40_b.jpg?width=670" width="670" height="210" alt="Aura" />
+      </label>
+      <label class="media-swatch"><span class="sr-only">AU 10 Puro Matt</span>
+        <img src="https://www.delconcausa.com/cdn/shop/files/Aura_Puro_Matt_7_5x40_b.jpg?width=670" width="670" height="210" alt="Aura" />
+      </label>
+    </body></html>`;
+    const catalog = extractCatalog(html, "https://www.delconcausa.com/products/aura");
+    const product = finalizeScrapedProduct(
+      emptyProduct({
+        factoryUrl: "https://www.delconcausa.com/products/aura",
+        factoryName: "Aura",
+        colors: [{ name: "Puro", imageUrl: "" }],
+      }),
+      { catalog, pageTitle: "Aura", sourceText: catalog.text, pageHtml: html },
+    );
+    assert.equal(product.colors.length, 1);
+    assert.match(product.colors[0].name, /puro/i);
+    assert.equal(product.colors[0].faces?.length, 3);
+    assert.equal(product.colors[0].faces?.every((face) => !face.imageUrl.includes("width=")), true);
+    assert.equal(product.colors[0].faces?.[0].widthIn, 8);
+    assert.equal(product.colors[0].faces?.[0].aspectRatio, 1);
+    assert.equal(product.colors[0].faces?.[1].widthIn, 3);
+    assert.ok((product.colors[0].faces?.[1].aspectRatio ?? 0) > 1);
+    assert.equal(product.heroImageUrl.includes("Puro_Slate_Bathroom_1080"), true);
+  });
+
+  it("keeps the Roca 4x4 grid and the subway photo as separate faces", () => {
+    const html = `<!doctype html><html><body><h1>Origin</h1>
+      <div class="dfs-card-shadow">
+        <img src="/uploads/2026/Cloud-1.jpg" width="300" alt="" />
+        <h3>CLOUD BG</h3>
+        <p>4X4<br />UORIGIN404U</p>
+      </div>
+      <div class="dfs-card-shadow">
+        <img src="/uploads/2026/Cloud-2.jpg" width="300" alt="" />
+        <h3>CLOUD BG</h3>
+        <p>3X6<br />UORIGIN306U<br />3X12<br />UORIGIN312U</p>
+      </div>
+    </body></html>`;
+    const catalog = extractCatalog(html, "https://rocatileusa.com/collections/origin");
+    const product = finalizeScrapedProduct(
+      emptyProduct({ factoryUrl: "https://rocatileusa.com/collections/origin", factoryName: "Origin" }),
+      { catalog, pageTitle: "Origin", sourceText: catalog.text, pageHtml: html },
+    );
+    const cloud = product.colors.find((color) => /cloud/i.test(color.name));
+    assert.ok(cloud, product.colors.map((color) => color.name).join(","));
+    assert.equal(cloud?.faces?.length, 2);
+    assert.equal(cloud?.faces?.some((face) => face.imageUrl.includes("Cloud-1")), true);
+    assert.equal(cloud?.faces?.some((face) => face.imageUrl.includes("Cloud-2")), true);
+    assert.equal(cloud?.name.toLowerCase().endsWith("bg"), false);
+  });
+
+  it("reads lazy Atlas mosaics from data-src and the product slug", () => {
+    const html = `<!doctype html><html><body><h1>Atlas</h1>
+      <a href="https://style-access.com/product/alabaster-4x4-mosaics/">
+        <img alt="" width="1079" height="1079" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
+          data-src="https://style-access.com/wp-content/uploads/2026/05/Alabaster-4x4-Large.jpeg"
+          data-srcset="https://style-access.com/wp-content/uploads/2026/05/Alabaster-4x4-Large-1080x1080.jpeg 1079w, https://style-access.com/wp-content/uploads/2026/05/Alabaster-4x4-Large-480x480.jpeg 480w" />
+      </a>
+      <a href="https://style-access.com/product/alabaster-trapezoid-mosaics/">
+        <img alt="" width="1079" height="1079" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
+          data-src="https://style-access.com/wp-content/uploads/2026/05/Alabaster-Trapesoid-Large.jpeg" />
+      </a>
+    </body></html>`;
+    const catalog = extractCatalog(html, "https://style-access.com/atlas/");
+    const product = finalizeScrapedProduct(
+      emptyProduct({ factoryUrl: "https://style-access.com/atlas/", factoryName: "Atlas", colors: [] }),
+      { catalog, pageTitle: "Atlas", sourceText: catalog.text, pageHtml: html },
+    );
+    const alabaster = product.colors.find((color) => /alabaster/i.test(color.name));
+    assert.ok(alabaster, product.colors.map((color) => color.name).join(","));
+    assert.equal(alabaster?.faces?.length, 2);
+    assert.equal(alabaster?.faces?.some((face) => face.imageUrl.endsWith("Alabaster-4x4-Large.jpeg")), true);
+    assert.equal(alabaster?.faces?.find((face) => face.imageUrl.endsWith("Alabaster-4x4-Large.jpeg"))?.aspectRatio, 1);
+    assert.equal(alabaster?.imageUrl.includes("1080x1080"), false);
+  });
+
+  it("reads a 3x16 plank from the variant SKU when the file is only a pixel crop", () => {
+    const html = `<!doctype html><html><body><h1>Aura</h1>
+      <script type="application/ld+json">
+        {"sku": "AURA-SLATE-3x16-MATT-CHIP","url": "https://www.delconcausa.com/products/aura?variant=50346113401151"}
+      </script>
+      <script>
+        {"src":"\\/\\/www.delconcausa.com\\/cdn\\/shop\\/files\\/Aura_Slate_Matt_670x210_abc.jpg","variant_ids":[50346113401151]}
+      </script>
+      <label class="media-swatch"><span class="sr-only">AU 08 Slate Matt</span>
+        <img src="https://www.delconcausa.com/cdn/shop/files/Aura_Slate_Matt_670x210_abc.jpg?width=670" width="670" height="210" alt="Aura" />
+      </label>
+    </body></html>`;
+    const catalog = extractCatalog(html, "https://www.delconcausa.com/products/aura");
+    const product = finalizeScrapedProduct(
+      emptyProduct({ factoryUrl: "https://www.delconcausa.com/products/aura", factoryName: "Aura" }),
+      { catalog, pageTitle: "Aura", sourceText: catalog.text, pageHtml: html },
+    );
+    const slate = product.colors.find((color) => /slate/i.test(color.name));
+    assert.ok(slate, product.colors.map((color) => color.name).join(","));
+    assert.equal(slate?.faces?.[0].widthIn, 3);
+    assert.equal(slate?.faces?.[0].heightIn, 16);
+    assert.ok((slate?.faces?.[0].aspectRatio ?? 0) > 1);
+    assert.equal(slate?.faces?.[0].imageUrl.includes("width="), false);
   });
 });

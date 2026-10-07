@@ -1,4 +1,5 @@
 import type { BrochureData } from "./brochure-types";
+import { resolveSwatchFaces } from "./swatch-geometry";
 
 // Blocking gate: description, images, colors, and sizes must be present
 // before a PDF is saved or downloaded. Technical specifications are a
@@ -15,6 +16,8 @@ export type MissingField =
   | "colors"
   | "color-images"
   | "sizes"
+  | "swatch-size"
+  | "photo-shape"
   | "tech-specs";
 
 export function filledTechSpecCount(data: Pick<BrochureData, "techSpecs">): number {
@@ -36,7 +39,7 @@ export function missingBrochureFields(data: BrochureData): MissingField[] {
   }
   if (!data.colors || data.colors.length === 0) {
     missing.push("colors");
-  } else if (data.colors.some((c) => !c.imageUrl || c.imageUrl.trim() === "")) {
+  } else if (data.colors.some((c) => !colorHasPhoto(c))) {
     missing.push("color-images");
   }
   if (!data.sizes || data.sizes.length === 0) {
@@ -47,8 +50,37 @@ export function missingBrochureFields(data: BrochureData): MissingField[] {
 
 /** Shown in the editor. Does not block download or save. */
 export function brochureWarnings(data: BrochureData): MissingField[] {
-  if (filledTechSpecCount(data) < MIN_TECH_SPECS) return ["tech-specs"];
-  return [];
+  const warnings: MissingField[] = [];
+  if (filledTechSpecCount(data) < MIN_TECH_SPECS) warnings.push("tech-specs");
+  if (unknownSwatchCaptions(data).length > 0) warnings.push("swatch-size");
+  if (mismatchedSwatchCaptions(data).length > 0) warnings.push("photo-shape");
+  return warnings;
+}
+
+export function mismatchedSwatchCaptions(data: BrochureData): string[] {
+  const captions: string[] = [];
+  for (const color of data.colors ?? []) {
+    for (const face of resolveSwatchFaces(color, data.sizes ?? [])) {
+      if (face.photoMismatch) captions.push(face.caption);
+    }
+  }
+  return captions;
+}
+
+export function unknownSwatchCaptions(data: BrochureData): string[] {
+  const captions: string[] = [];
+  for (const color of data.colors ?? []) {
+    for (const face of resolveSwatchFaces(color, data.sizes ?? [])) {
+      if (face.sizeUnknown) captions.push(face.caption);
+    }
+  }
+  return captions;
+}
+
+function colorHasPhoto(color: BrochureData["colors"][number]): boolean {
+  if (color.imageUrl && color.imageUrl.trim()) return true;
+  if (color.decoImageUrl && color.decoImageUrl.trim()) return true;
+  return Boolean(color.faces?.some((face) => face.imageUrl && face.imageUrl.trim()));
 }
 
 export const MISSING_FIELD_LABELS: Record<MissingField, string> = {
@@ -58,5 +90,8 @@ export const MISSING_FIELD_LABELS: Record<MissingField, string> = {
   colors: "any colors",
   "color-images": "swatch images for one or more colors",
   sizes: "size list",
+  "swatch-size":
+    "nominal size for one or more swatches (marked size unknown — the frame is not guessed as 12×24)",
+  "photo-shape": "photo shape doesn't match tile size",
   "tech-specs": `technical specifications (add at least ${MIN_TECH_SPECS} in Edit fields, or paste a spec-sheet URL)`,
 };

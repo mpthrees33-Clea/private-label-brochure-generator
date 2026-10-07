@@ -165,10 +165,12 @@ export function EditProductForm({ product }: { product: Product }) {
                   <img
                     src={c.imageUrl}
                     alt={c.trinityName}
-                    className="h-20 w-10 rounded object-cover"
+                    className="h-16 w-16 rounded object-contain bg-[#f3f3f3]"
                   />
                 ) : (
-                  <div className="h-20 w-10 rounded bg-surface-1" />
+                  <div className="flex h-16 w-16 items-center justify-center rounded bg-surface-1 text-[10px] uppercase text-fg-faint">
+                    no photo
+                  </div>
                 )}
                 <div>
                   <input
