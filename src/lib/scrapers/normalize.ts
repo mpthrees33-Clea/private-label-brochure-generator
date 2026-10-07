@@ -5,10 +5,13 @@ import {
   parseTechSpecs,
   parseTechSpecsFromHtml,
 } from "./spec-parse";
+import { extractSwatchCards } from "./catalog";
 import {
   canonicalFinish,
+  dropNominalTwins,
   parseSizeLabel,
   sizeChartLabel,
+  type ParsedSize,
 } from "./size-format";
 import type { ScrapedColor, ScrapedProduct, ScrapedSize } from "./types";
 import { isJunkImage, largerTwinUrl } from "../image-sniff";
@@ -66,6 +69,7 @@ export function finalizeScrapedProduct(
   }
   collapseFinishVariants(next);
   applyGroundedSpecs(next, pageHtml, sourceText);
+  if (pageHtml) attachSwatchCards(next, pageHtml);
 
   applyThicknessNotes(next, sourceText);
   clearUnratedDcof(next, sourceText);
@@ -507,25 +511,92 @@ function applyWallFootnote(product: ScrapedProduct, sourceText: string): void {
   product.footnotes.push("*ceramic wall tile — not for floors");
 }
 
+function attachSwatchCards(product: ScrapedProduct, html: string): void {
+  if (!product.factoryUrl) return;
+  const cards = extractSwatchCards(html, product.factoryUrl);
+  const fields = cards.filter((card) => !card.isStructure && isColorCaption(card.name));
+  const structures = cards.filter((card) => card.isStructure);
+  if (fields.length < 4 && structures.length < 2) return;
+
+  for (const field of fields) {
+    const key = field.name.toLowerCase();
+    let color = product.colors.find((item) => namesMatch(item.name, field.name));
+    if (!color) {
+      const mentioned = structures.some((card) => namesMatch(field.name, card.name));
+      if (!mentioned && fields.length < 4) continue;
+      color = { name: field.name, imageUrl: field.imageUrl };
+      product.colors.push(color);
+      const fieldLabels = product.sizes.filter((size) => !size.isDeco).map((size) => sizeChartLabel(size));
+      if (fieldLabels.length > 0) product.availability[key] = fieldLabels;
+    } else if (!color.imageUrl) {
+      color.imageUrl = field.imageUrl;
+    }
+  }
+
+  for (const structure of structures) {
+    const color = product.colors.find((item) => namesMatch(item.name, structure.name));
+    if (!color || color.decoImageUrl) continue;
+    color.decoImageUrl = structure.imageUrl;
+  }
+
+  const decoSizes = product.sizes.filter((size) => size.isDeco);
+  if (decoSizes.length !== 1) return;
+  const chart = sizeChartLabel(decoSizes[0]);
+  for (const color of product.colors) {
+    if (!color.decoImageUrl) continue;
+    const key = color.name.toLowerCase();
+    const list = product.availability[key] ?? [];
+    if (!list.some((entry) => sizeChartLabel({ label: entry }) === chart || entry === chart)) {
+      product.availability[key] = [...list, chart];
+    }
+  }
+}
+
+function isColorCaption(name: string): boolean {
+  if (parseSizeLabel(name)) return false;
+  if (/^(glossy|matte|polished|natural|soft|finish|sizes?)$/i.test(name.trim())) return false;
+  if (/^\d/.test(name.trim())) return false;
+  return name.trim().split(/\s+/).length <= 4;
+}
+
+function namesMatch(colorName: string, caption: string): boolean {
+  const color = colorName.toLowerCase().trim();
+  const cap = caption.toLowerCase().trim();
+  if (!color || !cap) return false;
+  const escaped = color.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (new RegExp(`\\b${escaped}\\b`, "i").test(cap)) return true;
+  const last = cap.split(/\s+/).pop() ?? "";
+  if (last.length < 4) return false;
+  const lastEscaped = last.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${lastEscaped}\\b`, "i").test(color);
+}
+
 function applyListedFormats(
   product: ScrapedProduct,
   listed: ListedFormat[],
   fromCatalog: boolean,
 ): void {
-  const rows = listed
+  const parsedRows = listed
     .map((format) => {
       const parsed = parseSizeLabel(format.raw);
       if (!parsed) return null;
+      if (parsed.widthIn <= 0 && parsed.label !== "trapezoid mosaic") return null;
+      return { format, parsed };
+    })
+    .filter((row): row is { format: ListedFormat; parsed: ParsedSize } => row != null);
+  const survivors = new Set(dropNominalTwins(parsedRows.map((row) => row.parsed)));
+  const rows = parsedRows
+    .filter((row) => survivors.has(row.parsed))
+    .map((row) => {
       const size: ScrapedSize = {
-        label: parsed.label,
-        iconKind: parsed.iconKind,
-        isDeco: parsed.isDeco || undefined,
-        sheetLabel: parsed.piece === "mosaic" ? format.sheetRaw : undefined,
-        finishes: parsed.finish ? [parsed.finish] : undefined,
+        label: row.parsed.label,
+        iconKind: row.parsed.iconKind,
+        isDeco: row.parsed.isDeco || undefined,
+        sheetLabel: row.parsed.piece === "mosaic" ? row.format.sheetRaw : undefined,
+        finishes: row.parsed.finish ? [row.parsed.finish] : undefined,
       };
       return size;
-    })
-    .filter((size): size is ScrapedSize => size != null);
+    });
   if (rows.length === 0) return;
 
   if (!fromCatalog) {

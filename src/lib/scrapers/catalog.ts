@@ -327,6 +327,66 @@ function absUrl(raw: string, pageUrl: string): string | null {
   }
 }
 
+export interface SwatchCard {
+  name: string;
+  imageUrl: string;
+  isStructure: boolean;
+}
+
+/** Short caption + image cards, including "3D Maki Corda" structure shots. */
+export function extractSwatchCards(html: string, pageUrl: string): SwatchCard[] {
+  const $ = cheerio.load(html);
+  const token = swatchToken(pageUrl);
+  const out: SwatchCard[] = [];
+  const seen = new Set<string>();
+  $("img").each((_, img) => {
+    const src = $(img).attr("src") || $(img).attr("data-src") || "";
+    const abs = src ? absUrl(src, pageUrl) : null;
+    if (!abs || isJunkImage(abs)) return;
+    if (token && !abs.toLowerCase().includes(token)) return;
+    const caption = captionNear($, img);
+    if (!caption) return;
+    const key = `${caption.toLowerCase()}|${abs}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({
+      name: caption,
+      imageUrl: preferLarger(abs),
+      isStructure: /\b3d\b|\bdeco(?:rative|r)?\b|\bstruttura\b/i.test(caption),
+    });
+  });
+  return out;
+}
+
+function captionNear($: cheerio.CheerioAPI, img: Element): string | null {
+  let card = $(img).parent();
+  for (let depth = 0; depth < 3 && card.length; depth += 1) {
+    if (card.is("body, html")) return null;
+    const text = card.text().replace(/\s+/g, " ").trim();
+    if (text.length > 80) return null;
+    const captions = card
+      .find("p, h3, h4, h5, figcaption")
+      .toArray()
+      .map((el) => $(el).text().replace(/\s+/g, " ").trim())
+      .filter((value) => value.length >= 2 && value.length <= 48 && value.split(/\s+/).length <= 6);
+    const unique = [...new Set(captions)];
+    if (unique.length === 1) return unique[0];
+    card = card.parent();
+  }
+  return null;
+}
+
+function swatchToken(pageUrl: string): string {
+  try {
+    const parts = new URL(pageUrl).pathname.split("/").filter(Boolean);
+    const last = (parts[parts.length - 1] ?? "").toLowerCase().replace(/-series$/, "");
+    const token = last.split("-").find((part) => part.length >= 4 && !/^(product|products|collection|collections|tile|tiles)$/.test(part));
+    return token ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export function catalogSummary(catalog: PageCatalog): string {
   if (catalog.groups.length === 0 && !catalog.collectionName) return "";
   const lines: string[] = ["Structured catalog parsed from the page (trust this over prose):"];

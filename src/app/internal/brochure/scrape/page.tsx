@@ -50,6 +50,10 @@ export default async function ScrapeRenderPage({
           <Link href="/internal/scrape" className="text-accent underline">
             ← Try another URL
           </Link>
+          {" · "}
+          <Link href="/internal/scrape?mode=pdf" className="text-accent underline">
+            Upload PDF
+          </Link>
         </p>
       </main>
     );

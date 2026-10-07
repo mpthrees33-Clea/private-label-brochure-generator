@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
-import type { Element } from "domhandler";
-import { nominalSheetLabel, parseSizeLabel } from "./size-format";
+import type { AnyNode, Element } from "domhandler";
+import { INCH_MARK, nominalSheetLabel, parseSizeLabel } from "./size-format";
 
 // Sizes the factory actually printed. Headings like "Wall Tile - 4x16"
 // are one layout; other sites put "3X12" in a card, "4x4 mosaic" in a
@@ -14,19 +14,30 @@ export interface ListedFormat {
   sheetRaw?: string;
 }
 
-const SIZE_RE =
-  /(\d+(?:[._]\d{1,2})?)\s*["”″]?\s*[x×]\s*(\d+(?:[._]\d{1,2})?)\s*["”″]?\s*(cm|mm)?/gi;
+const SIZE_RE = new RegExp(
+  `(\\d+(?:[._]\\d{1,2})?)\\s*${INCH_MARK}?\\s*[x×]\\s*(\\d+(?:[._]\\d{1,2})?)\\s*${INCH_MARK}?\\s*(cm|mm)?`,
+  "gi",
+);
 
 const LISTING_CUE =
   /\b(format|sizes?|available|nominal|bullnose|pencil|mosaic|trapezoid|deco|chevron|paver|field|sheet)\b/i;
 
 export function extractListedFormats(html: string): ListedFormat[] {
   const $ = cheerio.load(html);
+  const words = collectionWords($);
   $(
     "script, style, noscript, svg, nav, header, footer, aside, " +
       "[role=navigation], [role=banner], [role=contentinfo], " +
-      "blog-post-card, [class*='blog'], [class*='news'], [class*='announcement']",
+      "blog-post-card",
   ).remove();
+  // Theme stylesheets put "blog-layout" on <body>. That is not a blog post,
+  // and removing it deletes the product tables with it.
+  $("[class*='blog'], [class*='news'], [class*='announcement']").each((_, el) => {
+    if (el.type !== "tag") return;
+    const tag = el.tagName.toLowerCase();
+    if (tag === "html" || tag === "body" || tag === "main") return;
+    $(el).remove();
+  });
 
   const found: ListedFormat[] = [];
   const sheetKeys = new Set<string>();
@@ -38,6 +49,16 @@ export function extractListedFormats(html: string): ListedFormat[] {
     }
   });
 
+  $("p, td, li, span, h3, h4").each((_, el) => {
+    if ($(el).find("p, td, li, table").length > 0) return;
+    const text = $(el).text().replace(/\s+/g, " ").trim();
+    if (text.length < 4 || text.length > 80) return;
+    if (!/\d\s*[x×]\s*\d+[.,]?\d*\s*cm\b/i.test(text)) return;
+    if (!/["”″′'’]|\/\d/.test(text)) return;
+    if (skipForeignSize($, el, words)) return;
+    found.push({ raw: text });
+  });
+
   $("body")
     .find("*")
     .addBack()
@@ -45,12 +66,24 @@ export function extractListedFormats(html: string): ListedFormat[] {
     .each((_, el) => {
       if (el.type !== "text") return;
       if ($(el).closest("table").length) return;
+      if (skipForeignSize($, el, words)) return;
       const text = ($(el).text() || "").replace(/\s+/g, " ").trim();
       if (!text || text.length > 180) return;
-      if (/\b(chip|sample)\b/i.test(text)) return;
+      if (/\bsample\b/i.test(text)) return;
+      if (/\bchip\b/i.test(text) && !/\bchip\s*size\b/i.test(text)) return;
       if (/\bnow available\b|\bread\b/i.test(text)) return;
-      const standalone = text.length <= 40;
-      if (!standalone && !LISTING_CUE.test(text)) return;
+      // A comma-separated size line is a list even when it is longer than
+      // one label. A sentence that merely mentions a format ("the large
+      // 120x120 format") is not.
+      const leftoverWords = text
+        .replace(new RegExp(SIZE_RE.source, "gi"), " ")
+        .replace(/[^a-z0-9]+/gi, " ")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+      if (leftoverWords.length > 6) return;
+      const sizeList = leftoverWords.length <= 2;
+      if (!sizeList && text.length > 40 && !LISTING_CUE.test(text)) return;
       for (const format of formatsInText(text)) {
         if (format.sheetRaw) {
           sheetKeys.add(dimKey(format.sheetRaw));
@@ -63,6 +96,7 @@ export function extractListedFormats(html: string): ListedFormat[] {
     });
 
   $("img").each((_, el) => {
+    if (skipForeignSize($, el, words)) return;
     const src = $(el).attr("src") || $(el).attr("data-src") || "";
     const alt = $(el).attr("alt") || "";
     if (/room|bath|hero|slider|lifestyle|ambient|logo|icon/i.test(`${src} ${alt}`)) return;
@@ -70,7 +104,7 @@ export function extractListedFormats(html: string): ListedFormat[] {
     if (fromName) found.push(fromName);
   });
 
-  return dedupe(found);
+  return dedupe(dropBareMetricTwins(found));
 }
 
 /** "12\"x12\" Mesh-Mounted" on a SKU page. */
@@ -102,15 +136,17 @@ function formatsFromTable(
     .filter((row) => row.some(Boolean));
   if (rows.length < 2) return [];
 
-  const nominalIdx = rows.findIndex((row) =>
-    /size\s*\(nominal\)|nominal size|chip size/i.test(row[0] || ""),
+  const out: ListedFormat[] = [];
+  const nominalIdx = rows.findIndex(
+    (row) =>
+      row.filter(Boolean).length > 1 &&
+      /size\s*\(nominal\)|nominal size|^chip size$/i.test((row[0] || "").trim()),
   );
   const actualIdx = rows.findIndex((row) =>
     /size\s*\(actual\)|actual size|sheet size/i.test(row[0] || ""),
   );
   if (nominalIdx >= 0) {
     const header = rows[0];
-    const out: ListedFormat[] = [];
     for (let col = 1; col < Math.max(header.length, rows[nominalIdx].length); col++) {
       const title = header[col] || "";
       const nominal = rows[nominalIdx][col] || "";
@@ -127,19 +163,77 @@ function formatsFromTable(
         sheetRaw: mosaic && dimKey(actual) ? actual : undefined,
       });
     }
-    return out;
   }
 
-  const headers = rows[0].map((cell) => cell.toLowerCase());
+  const pieces = pieceRows(rows);
+  out.push(...pieces);
+  out.push(...labeledSizeCells(rows));
+
+  const headers = rows[0].map((cell) => cell.toLowerCase().trim());
   const typeIdx = headers.findIndex((cell) => cell === "type");
-  const sizeIdx = headers.findIndex((cell) => cell === "size");
-  if (typeIdx < 0 || sizeIdx < 0) return [];
-  return rows.slice(1).flatMap((row) => {
-    const type = row[typeIdx] || "";
-    const size = row[sizeIdx] || "";
-    if (!type || !size || !dimKey(size)) return [];
-    return [{ raw: `${type} ${size}` }];
-  });
+  const sizeIdx = headers.findIndex((cell) => cell === "size" || cell === "sizes");
+  if (sizeIdx >= 0) {
+    const claimed = new Set(out.map((format) => dimKey(format.raw)).filter(Boolean));
+    for (const row of rows.slice(1)) {
+      const size = (row[sizeIdx] || "").trim();
+      const key = dimKey(size);
+      if (!key || claimed.has(key)) continue;
+      const type = typeIdx >= 0 ? (row[typeIdx] || "").trim() : "";
+      if (typeIdx >= 0 && !type) continue;
+      out.push({ raw: type ? `${type} ${size}` : size });
+      claimed.add(key);
+    }
+  }
+  return out;
+}
+
+/** "Chip Size (inches): 7.87x7.87" lives in one cell, not two columns.
+ *  A sheet-size line is the mount for that chip, not a second field size. */
+function labeledSizeCells(rows: string[][]): ListedFormat[] {
+  const chips: ListedFormat[] = [];
+  const sheets: string[] = [];
+  for (const row of rows) {
+    const cells = row.map((cell) => cell.trim()).filter(Boolean);
+    if (cells.length === 0 || cells.length > 2) continue;
+    const cell = cells.join(" ");
+    if (!/chip\s*size|nominal\s*size|actual\s*size|sheet\s*size/i.test(cell)) continue;
+    if (!/\d\s*[x×]\s*\d/.test(cell)) continue;
+    const formats = formatsInText(cell);
+    if (/\bsheet\s*size\b/i.test(cell) && !/\bchip\s*size\b/i.test(cell)) {
+      for (const format of formats) sheets.push(format.raw);
+      continue;
+    }
+    chips.push(...formats);
+  }
+  if (chips.length === 0) return sheets.map((raw) => ({ raw }));
+  if (sheets.length === 1) {
+    const sheetKey = dimKey(sheets[0]);
+    for (const chip of chips) {
+      if (!chip.sheetRaw && dimKey(chip.raw) !== sheetKey) chip.sheetRaw = sheets[0];
+    }
+  }
+  return chips;
+}
+
+function pieceRows(rows: string[][]): ListedFormat[] {
+  const out: ListedFormat[] = [];
+  for (const row of rows) {
+    const cells = row.map((cell) => cell.trim()).filter(Boolean);
+    const nameCell = cells.find(
+      (cell) =>
+        /\b(mosaic|bullnose|basket\s*weave|basketweave|pencil|chevron|paver|deco)\b/i.test(cell) &&
+        cell.length < 40,
+    );
+    const sizeCell = cells.find((cell) => cell !== nameCell && cell.length < 30 && dimKey(cell));
+    if (!nameCell || !sizeCell) continue;
+    const chip = nameCell.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/);
+    if (chip && dimKey(sizeCell) !== dimKey(chip[0])) {
+      out.push({ raw: nameCell, sheetRaw: sizeCell });
+      continue;
+    }
+    out.push({ raw: `${nameCell} ${sizeCell}` });
+  }
+  return out;
 }
 
 function formatsInText(text: string): ListedFormat[] {
@@ -156,12 +250,18 @@ function formatsInText(text: string): ListedFormat[] {
       continue;
     }
     const piece = pieceWord(around);
-    out.push({ raw: piece ? `${raw} ${piece}` : raw });
+    const inch =
+      /^\s*(in(?:ches|ch)?)\b/i.exec(after) ||
+      /\(?(in(?:ches|ch)?)\)?\s*:?\s*$/i.exec(before);
+    const metric = inch ? null : /\(?(cm|mm)\)?\s*:?\s*$/i.exec(before);
+    const withUnit = inch ? `${raw} in` : metric ? `${raw} ${metric[1]}` : raw;
+    out.push({ raw: piece ? `${withUnit} ${piece}` : withUnit });
   }
   return out;
 }
 
 function pieceWord(text: string): string {
+  if (/\bchip\s*size\b/i.test(text)) return "mosaic";
   if (/\bbullnose\b|\bpencil\b|\blistello\b/i.test(text)) return "bullnose";
   if (/\btrapezoids?\b/i.test(text)) return "trapezoid mosaic";
   if (/\bmosaics?\b/i.test(text)) return "mosaic";
@@ -179,16 +279,123 @@ function formatFromFilename(url: string): ListedFormat | null {
   const b = Number(match[2].replace("_", "."));
   if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
   if (Math.max(a, b) > 150) return null;
-  return { raw: `${match[1].replace("_", ".")}x${match[2].replace("_", ".")}` };
+  const piece = /mosaic|basket/i.test(file)
+    ? " mosaic"
+    : /bullnose|pencil/i.test(file)
+      ? " bullnose"
+      : "";
+  return { raw: `${match[1].replace("_", ".")}x${match[2].replace("_", ".")}${piece}` };
 }
 
 function onlyInThicknessNote(text: string): boolean {
   return /\d+(?:\.\d+)?\s*mm\s*\(/i.test(text) && !LISTING_CUE.test(text);
 }
 
+const GENERIC_COLLECTION_WORDS = new Set([
+  "collection",
+  "series",
+  "tile",
+  "tiles",
+  "ceramic",
+  "ceramics",
+  "porcelain",
+  "mosaic",
+  "mosaics",
+  "floor",
+  "wall",
+  "product",
+  "products",
+]);
+
+function collectionWords($: cheerio.CheerioAPI): string[] {
+  const h1 = $("h1").first().text().replace(/\s+/g, " ").trim();
+  return h1
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length >= 4 && !GENERIC_COLLECTION_WORDS.has(word));
+}
+
+/** Lifestyle galleries list every product "in this image", including other collections. */
+function skipForeignSize(
+  $: cheerio.CheerioAPI,
+  el: AnyNode,
+  words: string[],
+): boolean {
+  if (words.length === 0) return false;
+  const start = el.type === "text" ? $(el).parent().get(0) : el;
+  if (!start || start.type !== "tag") return false;
+  const title = galleryProductTitle($, start);
+  if (title == null) return false;
+  if (!title) return true;
+  const hay = title.toLowerCase();
+  return !words.some((word) => hay.includes(word));
+}
+
+function galleryProductTitle($: cheerio.CheerioAPI, start: AnyNode): string | null {
+  let node = $(start);
+  let inGallery = false;
+  for (let depth = 0; depth < 8 && node.length; depth += 1) {
+    if (node.is("body, html")) break;
+    const text = node.text();
+    if (text.length > 15000) break;
+    if (/in this image/i.test(text)) {
+      inGallery = true;
+      break;
+    }
+    node = node.parent();
+  }
+  if (!inGallery) return null;
+
+  let cur = $(start);
+  for (let step = 0; step < 12; step += 1) {
+    const prev = cur.prev();
+    if (!prev.length) {
+      cur = cur.parent();
+      if (!cur.length || cur.is("body, html")) return "";
+      continue;
+    }
+    cur = prev;
+    const title = cur.text().replace(/\s+/g, " ").trim();
+    if (!title || title.length > 80) continue;
+    if (/^in this image$/i.test(title)) return "";
+    if (/^(size|code|technology|thickness|use|technical characteristics)\s*:?$/i.test(title)) continue;
+    if (/\d\s*[x×]\s*\d/.test(title)) continue;
+    if (!/[a-z]/i.test(title)) continue;
+    return title;
+  }
+  return "";
+}
+
+/** 6x24 next to 6x24cm is the same format, not 6 inches by 24 inches. */
+function dropBareMetricTwins(formats: ListedFormat[]): ListedFormat[] {
+  const metric = new Set(
+    formats
+      .map((format) => metricPairKey(format.raw))
+      .filter((key): key is string => Boolean(key)),
+  );
+  if (metric.size === 0) return formats;
+  return formats.filter((format) => {
+    const bare = barePairKey(format.raw);
+    return !(bare && metric.has(bare));
+  });
+}
+
+function metricPairKey(raw: string): string | null {
+  const match = raw.match(/(\d+(?:[._]\d+)?)\s*[x×]\s*(\d+(?:[._]\d+)?)\s*(cm|mm)\b/i);
+  if (!match) return null;
+  return `${match[1].replace("_", ".")}x${match[2].replace("_", ".")}`;
+}
+
+function barePairKey(raw: string): string | null {
+  const match = raw.trim().match(/^(\d+(?:[._]\d+)?)\s*[x×]\s*(\d+(?:[._]\d+)?)(?:\s|$)/i);
+  if (!match) return null;
+  if (/cm|mm|in(?:ch|ches)?|["”″′'’]/i.test(raw)) return null;
+  return `${match[1].replace("_", ".")}x${match[2].replace("_", ".")}`;
+}
+
 function dimKey(raw: string): string {
   const match = raw.match(
-    /(\d+(?:[._]\d+)?)\s*["”″]?\s*[x×]\s*(\d+(?:[._]\d+)?)/i,
+    new RegExp(`(\\d+(?:[._]\\d+)?)\\s*${INCH_MARK}?\\s*[x×]\\s*(\\d+(?:[._]\\d+)?)`, "i"),
   );
   if (!match) return "";
   const parsed = parseSizeLabel(match[0]);

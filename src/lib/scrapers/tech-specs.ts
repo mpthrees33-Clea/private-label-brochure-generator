@@ -200,8 +200,10 @@ export async function enrichTechSpecs(
   const token = opts?.pageUrl ? collectionToken(opts.pageUrl) : "";
   const queue = discoverSpecUrls(anchors, opts?.pageUrl);
   const seen = new Set(queue);
-  let merged = initial;
+  let pdfSpecs: Partial<TechSpecs> = {};
+  let htmlSpecs: Partial<TechSpecs> = {};
   let fetched = 0;
+  let merged = initial;
 
   while (queue.length > 0 && fetched < 6 && nonNullSpecCount(merged) < 6) {
     const url = queue.shift()!;
@@ -214,7 +216,8 @@ export async function enrichTechSpecs(
       if (isPdf) {
         const bytes = await res.arrayBuffer();
         if (bytes.byteLength === 0 || bytes.byteLength > MAX_PDF_BYTES) continue;
-        merged = fillEmpty(merged, await specsFromPdf(bytes));
+        pdfSpecs = fillEmpty(pdfSpecs, await specsFromPdf(bytes));
+        merged = fillEmpty(initial, pdfSpecs);
         continue;
       }
       if (
@@ -225,7 +228,10 @@ export async function enrichTechSpecs(
         continue;
       }
       const html = await res.text();
-      merged = fillEmpty(merged, parseTechSpecsFromHtml(html));
+      // A product page's own line ("Complies", "V2") replaces a number
+      // taken from a sitewide chart. A PDF only fills gaps.
+      htmlSpecs = { ...htmlSpecs, ...parseTechSpecsFromHtml(html) };
+      merged = { ...fillEmpty(initial, pdfSpecs), ...htmlSpecs };
       if (nonNullSpecCount(merged) >= 4 || !token) continue;
       for (const pdf of pdfLinks(html, url, token)) {
         if (seen.has(pdf)) continue;
@@ -236,7 +242,7 @@ export async function enrichTechSpecs(
       // Partial specs are better than a failed scrape.
     }
   }
-  return merged;
+  return { ...fillEmpty(initial, pdfSpecs), ...htmlSpecs };
 }
 
 function discoverSpecUrls(anchors: FetchedAnchor[], pageUrl?: string): string[] {

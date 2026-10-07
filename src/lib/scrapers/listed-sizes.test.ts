@@ -27,6 +27,78 @@ const AURA = `<html><body>
 <blog-post-card><a href="/blogs/all/new-england-now-available-in-48x48">Now Available in 48x48</a></blog-post-card>
 </body></html>`;
 
+describe("stated inches", () => {
+  it("does not round a fractional inch the factory printed", () => {
+    assert.equal(parseSizeLabel('2.75"x11"')?.label, '2.75"x11"');
+    assert.equal(parseSizeLabel("7.87x7.87 in")?.label, '7.87"x7.87"');
+  });
+
+  it("keeps a nominal 4x4 and the printed inches for a size that does not snap", () => {
+    assert.equal(parseSizeLabel('10x10cm (3 15/16" x 3 15/16")')?.label, '4"x4"');
+    assert.equal(parseSizeLabel('6x24cm (2 3/8" x 9 7/16")')?.label, '2 3/8"x9 7/16"');
+    assert.equal(parseSizeLabel('6x24cm (23/8"x97/16")')?.label, '2 3/8"x9 7/16"');
+  });
+
+  it("reads special pieces from a trim table", () => {
+    const html = `<body class="avada-blog-layout-large"><table><thead><tr><th>Code</th><th>Size</th></tr></thead>
+      <tr><td>USG2448367</td><td>24''x48''</td></tr></table>
+      <table><thead><tr><th>Code</th><th>Trim Piece</th><th>Size</th></tr></thead><tbody>
+      <tr><td>USP11ARC367</td><td></td><td>Arch Mosaic</td><td>11.5"x11.5"</td></tr>
+      <tr><td>USP915BSKT367</td><td></td><td>Long Basketweave</td><td>9''x15''</td></tr>
+      <tr><td>USP324BT367</td><td></td><td>Bullnose</td><td>3''x24''</td></tr>
+      <tr><td>USG12MO367</td><td></td><td>mosaic 2x2</td><td>12''x12''</td></tr>
+    </tbody></table></body>`;
+    const formats = extractListedFormats(html);
+    const labels = formats.map((format) => parseSizeLabel(format.raw)?.label);
+    assert.deepEqual(labels, [
+      '24"x48"',
+      '11.5"x11.5" arch mosaic',
+      '9"x15" basketweave',
+      '3"x24" bullnose',
+      '2"x2" mosaic',
+    ]);
+    const mosaic = formats.find((format) => /2x2/.test(format.raw));
+    assert.equal(mosaic?.sheetRaw, '12"x12"');
+  });
+
+  it("keeps a chip size inside one table cell and ignores a pixel box", () => {
+    const html = `<table>
+      <tr><td><strong>Sheet Size:</strong> 7.87x7.87</td></tr>
+      <tr><td><strong>Chip Size (inches):</strong> 7.87x7.87</td></tr>
+      <tr><td><strong>Chip Size (mm):</strong> 200x200</td></tr>
+    </table><p>150x150</p>`;
+    const labels = extractListedFormats(html).map((format) => parseSizeLabel(format.raw)?.label);
+    assert.deepEqual(labels.filter(Boolean), ['7.87"x7.87" mosaic', '8"x8" mosaic']);
+    assert.equal(parseSizeLabel("150x150"), null);
+    assert.equal(parseSizeLabel("24''x48''")?.label, '24"x48"');
+  });
+
+  it("reads a comma-separated size line and ignores a magazine headline", () => {
+    const html = `<h1>Look</h1>
+      <div>24''x48'', 24''x24'', 12''x24'', 12''x12''</div>
+      <a href="/magazine/the-large-120x120-format">The large 120x120 format redefines the elegance of stoneplay stone</a>`;
+    const labels = extractListedFormats(html).map((format) => parseSizeLabel(format.raw)?.label);
+    assert.deepEqual(labels.sort(), ['12"x12"', '12"x24"', '24"x24"', '24"x48"']);
+  });
+
+  it("drops other collections in a lifestyle gallery and a unitless twin of a cm size", () => {
+    const html = `<h1>Look</h1>
+      <p>10x10cm (3 15/16"x3 15/16")</p>
+      <p>6x24cm (2 3/8"x9 7/16")</p>
+      <p>6x24</p>
+      <div>
+        <p>In this image</p>
+        <p>LOOK BIANCO</p><p>Size:</p><p>10x10cm</p>
+        <p>REALSTONE GREY</p><p>Size:</p><p>60x120cm</p>
+      </div>`;
+    const labels = extractListedFormats(html).map((format) => parseSizeLabel(format.raw)?.label);
+    assert.ok(labels.includes('4"x4"'));
+    assert.ok(labels.includes('2 3/8"x9 7/16"'));
+    assert.equal(labels.includes('6"x24"'), false);
+    assert.equal(labels.includes('24"x48"'), false);
+  });
+});
+
 describe("listed sizes", () => {
   it("keeps every card size on a wall collection and drops sizes that are not listed", () => {
     const formats = extractListedFormats(ROCA).map((f) => parseSizeLabel(f.raw)?.label);

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileUp, Link2 } from "lucide-react";
 import { FACTORIES } from "@/lib/factories";
 
@@ -11,6 +11,10 @@ type Mode = "url" | "pdf";
 export default function ScrapeFormPage() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("url");
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("mode");
+    if (requested === "pdf") setMode("pdf");
+  }, []);
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);

@@ -16,6 +16,10 @@ export interface ParsedSize {
   isDeco: boolean;
   piece: "field" | "bullnose" | "mosaic" | "chevron" | "paver";
   finish: string | null;
+  /** Converted from a cm/mm measurement. */
+  fromMetric?: boolean;
+  /** The factory printed this inch size, including a mixed number. */
+  statedInches?: boolean;
 }
 
 const CM_TO_NOMINAL_IN: Array<[number, number]> = [
@@ -44,6 +48,9 @@ const INCH_NOMINALS = new Set([
   1, 2, 2.5, 3, 4, 5, 6, 8, 12, 13, 16, 18, 24, 36, 48,
 ]);
 
+/** Quote, prime, or the doubled apostrophe factories print for inches (24''x48''). */
+export const INCH_MARK = `(?:["”″′]|['’]{1,2})`;
+
 export function canonicalFinish(raw: string | null | undefined): string | null {
   if (!raw) return null;
   let s = raw
@@ -69,8 +76,38 @@ export function parseSizeLabel(raw: string): ParsedSize | null {
   const text = raw.replace(/\s+/g, " ").trim();
   if (!text) return null;
 
+  const stated = printedInchPair(text);
+  const metric = metricPair(text);
+  if (stated && metric) {
+    const aCm = metric.unit === "mm" ? metric.a / 10 : metric.a;
+    const bCm = metric.unit === "mm" ? metric.b / 10 : metric.b;
+    const na = nominalDetail(aCm);
+    const nb = nominalDetail(bCm);
+    const nominalTwin =
+      na.snapped &&
+      nb.snapped &&
+      Math.abs(na.inches - stated.a) <= 0.1 &&
+      Math.abs(nb.inches - stated.b) <= 0.1;
+    if (nominalTwin) return finishSize(na.inches, nb.inches, text, { fromMetric: true });
+    return finishSize(stated.a, stated.b, text, {
+      statedInches: true,
+      aLabel: stated.aLabel,
+      bLabel: stated.bLabel,
+    });
+  }
+  if (stated) {
+    return finishSize(stated.a, stated.b, text, {
+      statedInches: true,
+      aLabel: stated.aLabel,
+      bLabel: stated.bLabel,
+    });
+  }
+
   const dim = text.match(
-    /(\d+(?:[._]\d+)?)\s*(?:["”″])?\s*[x×]\s*(\d+(?:[._]\d+)?)\s*(?:["”″])?\s*(cm|mm)?/i,
+    new RegExp(
+      `(\\d+(?:[._]\\d+)?)\\s*${INCH_MARK}?\\s*[x×]\\s*(\\d+(?:[._]\\d+)?)\\s*${INCH_MARK}?\\s*(cm|mm)?`,
+      "i",
+    ),
   );
   if (!dim) {
     // A trapezoid mosaic often has no chip rectangle, only a sheet size.
@@ -97,29 +134,36 @@ export function parseSizeLabel(raw: string): ParsedSize | null {
     a /= 10;
     b /= 10;
   }
-  const metric = unit === "cm" || unit === "mm" || looksMetric(text, a, b);
-  if (metric) {
+  const fromMetric = unit === "cm" || unit === "mm" || looksMetric(text, a, b);
+  if (fromMetric) {
     a = cmToNominalInches(a);
     b = cmToNominalInches(b);
+  } else if (Math.max(a, b) > 48) {
+    // 150x150 is a pixel or a CSS box, not a tile. Real oversized
+    // formats are written in cm (120x278cm) and take the metric path.
+    return null;
   }
 
+  return finishSize(a, b, text, { fromMetric });
+}
+
+function finishSize(
+  a: number,
+  b: number,
+  text: string,
+  flags: { fromMetric?: boolean; statedInches?: boolean; aLabel?: string; bLabel?: string },
+): ParsedSize {
   const widthIn = Math.min(a, b);
   const heightIn = Math.max(a, b);
+  const aLabel = a <= b ? flags.aLabel : flags.bLabel;
+  const bLabel = a <= b ? flags.bLabel : flags.aLabel;
   const piece = detectPiece(text);
   const isDeco = piece === "field" ? /\bdeco(?:rative|r)?\b/i.test(text) : false;
   const finish = finishFromSizeText(text);
-  const suffix =
-    piece === "bullnose"
-      ? " bullnose"
-      : piece === "mosaic"
-        ? " mosaic"
-        : piece === "chevron"
-          ? " chevron"
-          : piece === "paver"
-            ? " paver"
-            : "";
-  const label = `${formatIn(widthIn)}"x${formatIn(heightIn)}"${suffix}`;
-
+  const suffix = pieceSuffix(text, piece);
+  const label = flags.statedInches && aLabel && bLabel
+    ? `${aLabel}"x${bLabel}"${suffix}`
+    : `${formatIn(widthIn)}"x${formatIn(heightIn)}"${suffix}`;
   return {
     label,
     widthIn,
@@ -128,15 +172,119 @@ export function parseSizeLabel(raw: string): ParsedSize | null {
     isDeco,
     piece: piece === "field" ? "field" : piece,
     finish,
+    fromMetric: flags.fromMetric,
+    statedInches: flags.statedInches,
   };
+}
+
+function pieceSuffix(text: string, piece: ParsedSize["piece"]): string {
+  if (piece === "bullnose") return " bullnose";
+  if (/\bbasket\s*weave\b|\bbasketweave\b/i.test(text)) return " basketweave";
+  if (/\barch\s+mosaic\b/i.test(text)) return " arch mosaic";
+  if (piece === "mosaic") return " mosaic";
+  if (piece === "chevron") return " chevron";
+  if (piece === "paver") return " paver";
+  return "";
 }
 
 function detectPiece(text: string): ParsedSize["piece"] {
   if (/\bbullnose\b|\bpencil\b|\blistello\b/i.test(text)) return "bullnose";
-  if (/\bmosaics?\b|\btrapezoids?\b/i.test(text)) return "mosaic";
+  if (/\bmosaics?\b|\btrapezoids?\b|\bbasketweave\b|\bbasket\s*weave\b/i.test(text)) return "mosaic";
   if (/\bchevron\b/i.test(text)) return "chevron";
   if (/\bpaver\b|\b2\s*cm\b|\b20\s*mm\b/i.test(text)) return "paver";
   return "field";
+}
+
+interface InchSide {
+  n: number;
+  label: string;
+}
+
+function printedInchPair(
+  text: string,
+): { a: number; b: number; aLabel: string; bLabel: string } | null {
+  const word = text.match(
+    /(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(?:in(?:ches|ch)?)\b/i,
+  );
+  if (word && !/\bcm\b|\bmm\b/i.test(word[0])) {
+    return {
+      a: Number(word[1]),
+      b: Number(word[2]),
+      aLabel: formatIn(Number(word[1])),
+      bLabel: formatIn(Number(word[2])),
+    };
+  }
+  const re = new RegExp(
+    `(\\d+\\s+\\d+\\s*\\/\\s*\\d+|\\d+\\/\\d+|\\d+(?:\\.\\d+)?)\\s*${INCH_MARK}?\\s*[x×]\\s*(\\d+\\s+\\d+\\s*\\/\\s*\\d+|\\d+\\/\\d+|\\d+(?:\\.\\d+)?)\\s*${INCH_MARK}`,
+    "gi",
+  );
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text))) {
+    if (!/["”″′'’]/.test(match[0])) continue;
+    const left = parseInchSide(match[1]);
+    const right = parseInchSide(match[2]);
+    if (!left || !right) continue;
+    return { a: left.n, b: right.n, aLabel: left.label, bLabel: right.label };
+  }
+  return null;
+}
+
+function parseInchSide(token: string): InchSide | null {
+  const t = token.trim();
+  const spaced = /^(\d+)\s+(\d+)\s*\/\s*(\d+)$/.exec(t);
+  if (spaced) {
+    return {
+      n: Number(spaced[1]) + Number(spaced[2]) / Number(spaced[3]),
+      label: `${Number(spaced[1])} ${Number(spaced[2])}/${Number(spaced[3])}`,
+    };
+  }
+  const frac = /^(\d+)\/(\d+)$/.exec(t);
+  if (frac) {
+    const digits = frac[1];
+    for (const numLen of [2, 1]) {
+      if (digits.length <= numLen) continue;
+      const whole = digits.slice(0, digits.length - numLen);
+      const num = digits.slice(digits.length - numLen);
+      if (whole.length < 1 || whole.length > 2) continue;
+      return {
+        n: Number(whole) + Number(num) / Number(frac[2]),
+        label: `${Number(whole)} ${Number(num)}/${Number(frac[2])}`,
+      };
+    }
+    return {
+      n: Number(frac[1]) / Number(frac[2]),
+      label: `${Number(frac[1])}/${Number(frac[2])}`,
+    };
+  }
+  if (/^\d+(?:\.\d+)?$/.test(t)) {
+    const n = Number(t);
+    return { n, label: formatIn(n) };
+  }
+  return null;
+}
+
+function metricPair(text: string): { a: number; b: number; unit: "cm" | "mm" } | null {
+  const match = text.match(/(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(cm|mm)\b/i);
+  if (!match) return null;
+  return {
+    a: Number(match[1].replace(",", ".")),
+    b: Number(match[2].replace(",", ".")),
+    unit: match[3].toLowerCase() as "cm" | "mm",
+  };
+}
+
+function nominalDetail(cm: number): { inches: number; snapped: boolean } {
+  let bestIn = cm / 2.54;
+  let bestDist = Infinity;
+  for (const [nominalCm, inches] of CM_TO_NOMINAL_IN) {
+    const dist = Math.abs(cm - nominalCm);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestIn = inches;
+    }
+  }
+  if (bestDist <= 1.6) return { inches: bestIn, snapped: true };
+  return { inches: cmToNominalInches(cm), snapped: false };
 }
 
 function finishFromSizeText(text: string): string | null {
@@ -149,10 +297,9 @@ function finishFromSizeText(text: string): string | null {
 }
 
 function looksMetric(text: string, a: number, b: number): boolean {
-  if (/["”″]|inch/i.test(text)) return false;
-  const max = Math.max(a, b);
-  if (max > 48) return true;
+  if (/["”″′'’]|inch/i.test(text)) return false;
   // 40x120, 30x60, 100x100 — cm nominals that are not also inch sizes.
+  // A bare 150x150 is not one of these; do not treat every large pair as cm.
   const cmOnly = new Set([20, 30, 40, 45, 60, 75, 80, 90, 100, 120]);
   const aCm = cmOnly.has(a);
   const bCm = cmOnly.has(b);
@@ -175,8 +322,27 @@ export function cmToNominalInches(cm: number): number {
 }
 
 function formatIn(n: number): string {
-  if (Number.isInteger(n)) return String(n);
-  return String(Math.round(n * 10) / 10);
+  if (!Number.isFinite(n)) return "";
+  const rounded = Math.round(n * 100) / 100;
+  if (Number.isInteger(rounded)) return String(rounded);
+  return String(rounded);
+}
+
+/** When a page prints both 7.87" and 200mm, keep the stated inches.
+ *  When 10cm is the nominal of a printed 3 15/16", keep the nominal. */
+export function dropNominalTwins<T extends ParsedSize>(rows: T[]): T[] {
+  const close = (a: ParsedSize, b: ParsedSize, tol: number) =>
+    Math.abs(a.widthIn - b.widthIn) <= tol && Math.abs(a.heightIn - b.heightIn) <= tol;
+  const keptMetric = rows.filter((row) => {
+    if (!row.fromMetric) return true;
+    const stated = rows.find((other) => other.statedInches && close(row, other, 0.35));
+    if (!stated) return true;
+    return close(row, stated, 0.1);
+  });
+  return keptMetric.filter((row) => {
+    if (!row.statedInches) return true;
+    return !keptMetric.some((other) => other.fromMetric && close(row, other, 0.1));
+  });
 }
 
 export function inferIconKind(

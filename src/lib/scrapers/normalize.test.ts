@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { extractCatalog } from "./catalog";
 import { factoryFromUrl } from "../factories";
 import { brochureWarnings, missingBrochureFields } from "../brochure-quality";
+import { applyColorPage, applyDecorFragment, followPlan } from "./linked-pages";
 import { finalizeScrapedProduct } from "./normalize";
 import { isJunkImage } from "../image-sniff";
 import { sizeAvailable, sizeChartLabel } from "./size-format";
@@ -385,6 +386,99 @@ describe("tech spec gate", () => {
       }),
       [],
     );
+  });
+});
+
+describe("structure decos and linked pages", () => {
+  it("attaches a 3D image to every color the page shows one for", () => {
+    const html = `
+      <div><div class="ratio"><img src="https://www.ragnousa.com/app/uploads/collezioni/look-rdve/a.jpg" /></div><p>Amaranto</p></div>
+      <div><div class="ratio"><img src="https://www.ragnousa.com/app/uploads/collezioni/look-corda/b.jpg" /></div><p>Corda</p></div>
+      <div><div class="ratio"><img src="https://www.ragnousa.com/app/uploads/collezioni/look-giada/c.jpg" /></div><p>Giada</p></div>
+      <div><div class="ratio"><img src="https://www.ragnousa.com/app/uploads/collezioni/look-oliva/d.jpg" /></div><p>Oliva</p></div>
+      <div><div class="ratio"><img src="https://www.ragnousa.com/app/uploads/collezioni/look-rdv9/e.jpg" /></div><p>3d Maki Amaranto</p></div>
+      <div><div class="ratio"><img src="https://www.ragnousa.com/app/uploads/collezioni/look-rdqm/f.jpg" /></div><p>3d Maki Corda</p></div>
+      <div><div class="ratio"><img src="https://www.ragnousa.com/app/uploads/collezioni/look-rdqe/g.jpg" /></div><p>Yubi 3D Giada</p></div>
+      <div><div class="ratio"><img src="https://www.ragnousa.com/app/uploads/collezioni/look-rcu5/h.jpg" /></div><p>Yubi 3D Oliva</p></div>`;
+    const product = finalizeScrapedProduct(
+      emptyProduct({
+        factoryUrl: "https://www.ragnousa.com/collections/look-series/",
+        colors: [
+          { name: "Amaranto", imageUrl: "https://cdn.example/a.jpg" },
+          { name: "Corda", imageUrl: "https://cdn.example/b.jpg" },
+        ],
+        sizes: [
+          { label: '4"x4"', iconKind: "square" },
+          { label: '4"x4"', iconKind: "square", isDeco: true },
+        ],
+      }),
+      { pageHtml: html, pageTitle: "Look" },
+    );
+    const byName = Object.fromEntries(product.colors.map((color) => [color.name.toLowerCase(), color]));
+    assert.ok(byName.amaranto.decoImageUrl?.includes("look-rdv9"));
+    assert.ok(byName.corda.decoImageUrl?.includes("look-rdqm"));
+    assert.ok(byName.giada.decoImageUrl?.includes("look-rdqe"));
+    assert.ok(byName.oliva.decoImageUrl?.includes("look-rcu5"));
+  });
+
+  it("adds decor colors from a lazy tab", () => {
+    const product = emptyProduct({
+      colors: [{ name: "Ambient White", imageUrl: "https://cdn.example/white.jpg" }],
+      sizes: [{ label: '2.75"x11"', iconKind: "rectangle" }],
+    });
+    applyDecorFragment(
+      product,
+      `<div><img src="/media/Color-Mix.jpg" /><strong>8"x8"</strong><p>Thickness 8 mm COLOR MIX Soft</p></div>`,
+      "https://www.panaria.us/products/collection/playlist",
+    );
+    assert.ok(product.colors.some((color) => color.name.toLowerCase() === "color mix"));
+    assert.ok(product.sizes.some((size) => size.isDeco && size.label === '8"x8"'));
+  });
+
+  it("replaces a nameless mosaic size with the inches printed on the sku page", () => {
+    const product = emptyProduct({
+      colors: [{ name: "Black", imageUrl: "https://cdn.example/black.jpg" }],
+      sizes: [{ label: "mosaic field", iconKind: "mosaic" }],
+    });
+    assert.equal(followPlan("<p>mosaic field</p>", product), "sizes");
+    applyColorPage(
+      product,
+      "Black",
+      `<table><tr><td>Chip Size (inches): 7.87x7.87</td></tr><tr><td>Chip Size (mm): 200x200</td></tr></table>`,
+      "sizes",
+      "https://mir-mosaic.com/product/celestial-black/",
+    );
+    assert.deepEqual(
+      product.sizes.map((size) => size.label),
+      ['7.87"x7.87" mosaic'],
+    );
+  });
+
+  it("keeps a mosaic sheet listed on the color page", () => {
+    const product = emptyProduct({
+      colors: [{ name: "Alpine Verde", imageUrl: "https://cdn.example/a.jpg" }],
+      sizes: [{ label: '24"x48"', iconKind: "rectangle" }],
+    });
+    applyColorPage(
+      product,
+      "Alpine Verde",
+      `<table><tr><th>Code</th><th>Trim Piece</th><th>Size</th></tr>
+        <tr><td>A</td><td>mosaic 2x2</td><td>12"x12"</td></tr>
+        <tr><td>B</td><td>Bullnose</td><td>3"x24"</td></tr></table>`,
+      "availability",
+      "https://www.stonepeakceramics.com/product/classic-boutique-alpine-verde/",
+    );
+    const mosaic = product.sizes.find((size) => size.label.includes('2"x2"'));
+    assert.equal(mosaic?.sheetLabel, '12"x12"');
+    assert.ok(product.availability["alpine verde"]?.some((label) => label.includes("sheet")));
+  });
+
+  it("follows color pages when availability is only in a tooltip", () => {
+    const product = emptyProduct({
+      sizes: [{ label: '24"x48"', iconKind: "rectangle" }],
+    });
+    const html = `<div title="*Not all the sizes are available for each color">24''x48'', 12''x12''</div>`;
+    assert.equal(followPlan(html, product), "availability");
   });
 });
 

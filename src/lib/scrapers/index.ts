@@ -1,6 +1,7 @@
-import { fetchAndCleanPage } from "./fetch";
+import { fetchAndCleanPage, fetchFactoryDocument } from "./fetch";
 import { scrapeFromPdfWithAI, scrapeWithAI } from "./ai";
 import { extractCatalog } from "./catalog";
+import { supplementFromLinkedPages } from "./linked-pages";
 import { enrichTechSpecs, nonNullSpecCount } from "./tech-specs";
 import { improveProductImages } from "./images";
 import type { ScrapedProduct } from "./types";
@@ -32,23 +33,12 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     return product;
   }
 
-  // GET it once. If the server actually returns a PDF (e.g. URL is a
-  // download proxy with no .pdf suffix), pivot to the PDF flow.
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-    },
-    redirect: "follow",
-  });
-  if (!res.ok) {
-    throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
-  }
-  const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+  // GET it once. A 429/403 is retried, then loaded in Chrome, and if the
+  // site still refuses, the error points at the Upload PDF tab.
+  const doc = await fetchFactoryDocument(url);
+  const contentType = doc.contentType.toLowerCase();
   if (contentType.includes("application/pdf")) {
-    const bytes = await res.arrayBuffer();
+    const bytes = doc.bytes.buffer.slice(doc.bytes.byteOffset, doc.bytes.byteOffset + doc.bytes.byteLength) as ArrayBuffer;
     const product = await scrapeFromPdfWithAI(bytes, url);
     cache.set(url, product);
     return product;
@@ -64,7 +54,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     );
   }
 
-  const html = await res.text();
+  const html = new TextDecoder().decode(doc.bytes);
   const catalog = extractCatalog(html, url);
   const page = await fetchAndCleanPage(url, html);
   if (page.cleanedHtml.length < MIN_CLEANED_HTML_CHARS) {
@@ -75,6 +65,9 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     );
   }
   const product = await scrapeWithAI(url, page.cleanedHtml, page.title, catalog, html);
+  await supplementFromLinkedPages(product, html, page.anchors, url).catch((err) => {
+    console.error("supplementFromLinkedPages failed:", err);
+  });
   await improveProductImages(product, catalog).catch((err) => {
     console.error("improveProductImages failed:", err);
   });
@@ -99,17 +92,14 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
 }
 
 async function scrapePdfUrl(url: string): Promise<ScrapedProduct> {
-  const res = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; QuickFlipBrochures/1.0)" },
-    redirect: "follow",
-  });
-  if (!res.ok) {
-    throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
-  }
-  const bytes = await res.arrayBuffer();
-  if (bytes.byteLength === 0) {
+  const doc = await fetchFactoryDocument(url);
+  if (doc.bytes.byteLength === 0) {
     throw new Error(`PDF at ${url} returned 0 bytes.`);
   }
+  const bytes = doc.bytes.buffer.slice(
+    doc.bytes.byteOffset,
+    doc.bytes.byteOffset + doc.bytes.byteLength,
+  ) as ArrayBuffer;
   return scrapeFromPdfWithAI(bytes, url);
 }
 

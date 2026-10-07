@@ -126,4 +126,72 @@ describe("tech spec parsing", () => {
     assert.equal(real.waterAbsorption, "> 15%");
     assert.equal(real.chemicalResistance, "class b");
   });
+
+  it("keeps the average breaking strength and a printed shade", () => {
+    const html = `<table><tr><td>Breaking strength</td><td>ASTM C648</td><td>≥ 125 lbf</td><td>≥350 lbf</td></tr>
+      <tr><td>Shade variation</td><td>ANSI A137.1</td><td>As indicated</td><td>V2</td></tr></table>`;
+    const specs = parseTechSpecsFromHtml(html);
+    assert.equal(specs.breakingStrength, "≥ 350 lbf");
+    assert.equal(specs.shadeVariation, "v2");
+  });
+
+  it("keeps Complies and V2 from the product line, not a comparison chart", () => {
+    const html = `<div class="product-specs__item"><span>Thickness:</span><span>8 mm</span></div>
+      <div class="product-specs__item"><span>Breaking Strength (ASTM C648):</span><span>Complies</span></div>
+      <div class="product-specs__item"><span>Shade Variation:</span><span>V2</span></div>
+      <div class="product-specs__item"><span>D.C.O.F. (ANSI A326.3):</span><span>≥ 0.42 WET</span></div>
+      <table><tr><td>Breaking Strength</td><td>≥275 lbf</td><td>≥300 lbf</td></tr>
+      <tr><td>Breaking Strength Outdoor 2cm</td><td>2000 lbf</td><td>≥2500 lbf</td></tr></table>`;
+    const specs = parseTechSpecsFromHtml(html);
+    assert.equal(specs.thickness, "8mm");
+    assert.equal(specs.breakingStrength, "complies");
+    assert.equal(specs.shadeVariation, "v2");
+    assert.equal(specs.dcof, "≥ 0.42 wet");
+  });
+
+  it("uses the common collection thickness, not one deco sku", () => {
+    const cards = Array.from({ length: 6 }, () => `<div><p>Thickness:</p><p>MM 10</p></div>`).join("");
+    const deco = `<div><p>Thickness:</p><p>MM 13,5</p></div>`;
+    const specs = parseTechSpecsFromHtml(`<body>${cards}${deco}</body>`);
+    assert.equal(specs.thickness, "10mm");
+  });
+
+  it("reads a one-cell spec row", () => {
+    const html = `<table>
+      <tr><td><strong>Thickness:</strong> 0.34</td></tr>
+      <tr><td><strong>Variation:</strong> V4 (Substantial)</td></tr>
+      <tr><td><strong>DCOF:</strong> ? 0.42</td></tr>
+      <tr><td><strong>Slip resistance:</strong> R10</td></tr>
+    </table>`;
+    const specs = parseTechSpecsFromHtml(html);
+    assert.equal(specs.thickness, '0.34"');
+    assert.equal(specs.shadeVariation, "v4");
+    assert.equal(specs.dcof, "0.42 · R10");
+  });
+
+  it("reads a sku spec block that prints variation, slip, and inch thickness", () => {
+    const html = `<div><p>Thickness:</p><p>0.34</p></div>
+      <div><p>Variation:</p><p>V4 (Substantial)</p></div>
+      <div><p>Slip resistance:</p><p>R10</p></div>
+      <div><p>DCOF:</p><p>? 0.42</p></div>`;
+    const specs = parseTechSpecsFromHtml(html);
+    assert.equal(specs.thickness, '0.34"');
+    assert.equal(specs.shadeVariation, "v4");
+    assert.equal(specs.dcof, "0.42 · R10");
+  });
+
+  it("does not treat separate v ratings as a printed range", () => {
+    const dropped = groundTechSpecs(
+      { shadeVariation: "v2-v3", breakingStrength: "≥ 250 lbs", thickness: "13.5mm" },
+      "Thickness MM 10 breaking strength is not listed. v2 appears in another collection.",
+    );
+    assert.equal(dropped.shadeVariation, undefined);
+    assert.equal(dropped.breakingStrength, undefined);
+    assert.equal(dropped.thickness, undefined);
+    const kept = groundTechSpecs(
+      { breakingStrength: "≥ 350 lbf" },
+      "Breaking strength ASTM C648 ≥ 125 lbf ≥350 lbf",
+    );
+    assert.equal(kept.breakingStrength, "≥ 350 lbf");
+  });
 });
