@@ -12,6 +12,7 @@ import {
   MISSING_FIELD_LABELS,
 } from "@/lib/brochure-quality";
 import { KENDALL_SAMPLE } from "@/lib/sample-data";
+import { brochurePdfFilename } from "@/lib/pdf/filename";
 import type { Product } from "@/lib/store/types";
 
 export const runtime = "nodejs";
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${brochure.filename}"`,
+        "Content-Disposition": `attachment; filename="${brochure.filename}"`,
         "Cache-Control": "private, no-store",
       },
     });
@@ -115,7 +116,7 @@ async function renderSaved(
   return {
     data: withLayout,
     factoryName: product.factoryName,
-    filename: safeFilename(`${product.trinityName || product.id}.pdf`),
+    filename: brochurePdfFilename(product.trinityName, product.id),
   };
 }
 

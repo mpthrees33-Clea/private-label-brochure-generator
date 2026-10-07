@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Brochure } from "@/components/brochure/Brochure";
 import { KENDALL_SAMPLE } from "@/lib/sample-data";
 
@@ -13,13 +12,13 @@ export default function PreviewPage() {
     <>
       {/* Download bar — hidden when Puppeteer prints the page. */}
       <div className="sticky top-0 z-50 flex justify-end gap-3 bg-bg/80 px-6 py-3 backdrop-blur print:hidden">
-        <Link
+        <a
           href="/api/brochure/pdf?source=preview"
-          target="_blank"
+          download="preview.pdf"
           className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-white shadow-glow-accent transition hover:bg-accent-light"
         >
           Download PDF
-        </Link>
+        </a>
       </div>
       <Brochure data={KENDALL_SAMPLE} />
     </>

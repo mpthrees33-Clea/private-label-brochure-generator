@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   groundTechSpecs,
   parseTechSpecItems,
+  upgradeMeasuredSpec,
   parseTechSpecs,
   parseTechSpecsDetailed,
   parseTechSpecsFromHtml,
@@ -306,5 +307,13 @@ describe("tech spec parsing", () => {
     assert.equal(grounded.dcof, undefined);
     assert.match(grounded.slipResistance || "", /matte R9 A/);
     assert.match(grounded.slipResistance || "", /grip R11 C/);
+  });
+
+  it("keeps a printed breaking-strength unit from the sheet that states it", () => {
+    const sell = parseTechSpecs("Break Strength ISO-10545/4 ≥125 lbf");
+    assert.equal(sell.breakingStrength, "≥ 125 lbf");
+    assert.equal(upgradeMeasuredSpec("≥ 125", "≥ 125 lbf"), "≥ 125 lbf");
+    assert.equal(upgradeMeasuredSpec("≥ 125 lbf", "≥ 125"), "≥ 125 lbf");
+    assert.equal(upgradeMeasuredSpec("≥ 350 lbf", "≥ 125 lbf"), "≥ 350 lbf");
   });
 });

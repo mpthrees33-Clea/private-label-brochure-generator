@@ -637,4 +637,110 @@ describe("trims and shared mosaics", () => {
     assert.equal(/47 2\/8/.test(labels), false);
     assert.match(labels, /2 13\/16"x23 5\/8"/);
   });
+
+  it("strips a collection prefix and a trailing bg code from color names", () => {
+    const watercolor = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Watercolor",
+        colors: [
+          { name: "Watercolor Denim", imageUrl: "https://cdn.example/denim.jpg" },
+          { name: "WATERCOLOR GRAY", imageUrl: "https://cdn.example/gray.jpg" },
+        ],
+        availability: { "Watercolor Denim": ['4"x16"'] },
+      }),
+      { pageTitle: "Watercolor", sourceText: "watercolor denim gray" },
+    );
+    assert.deepEqual(
+      watercolor.colors.map((color) => color.name.toLowerCase()),
+      ["denim", "gray"],
+    );
+    assert.deepEqual(watercolor.availability.denim, ['4"x16"']);
+
+    const roca = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Origin",
+        colors: [
+          { name: "Cloud BG", imageUrl: "https://cdn.example/cloud.jpg" },
+          { name: "Moss BG", imageUrl: "https://cdn.example/moss.jpg" },
+        ],
+      }),
+      { pageTitle: "Origin", sourceText: "Origin Ceramic Wall" },
+    );
+    assert.deepEqual(
+      roca.colors.map((color) => color.name.toLowerCase()),
+      ["cloud", "moss"],
+    );
+  });
+
+  it("keeps the wall-only footnote for ceramic wall tile and drops it for floor and wall porcelain", () => {
+    const aura = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Aura",
+        footnotes: ["*ceramic wall tile — not for floors"],
+        colors: [{ name: "Puro", imageUrl: "https://cdn.example/puro.jpg" }],
+        sizes: [{ label: '3"x16"', iconKind: "plank" }],
+      }),
+      {
+        pageTitle: "Aura",
+        sourceText: '<span class="badge">Floor</span><span class="badge">Wall</span> Glazed Porcelain Stoneware',
+      },
+    );
+    assert.equal(aura.footnotes.some((note) => /not for floors/i.test(note)), false);
+
+    const origin = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Origin",
+        footnotes: ["*ceramic wall tile — not for floors"],
+        colors: [{ name: "Cloud", imageUrl: "https://cdn.example/cloud.jpg" }],
+      }),
+      {
+        pageTitle: "Origin",
+        sourceText: "FLOOR TILE WALL TILES GLAZED PORCELAIN Origin Ceramic Wall",
+      },
+    );
+    assert.equal(origin.footnotes.some((note) => /not for floors/i.test(note)), true);
+  });
+
+  it("uses the printed semi-gloss finish and keeps a single TCNA footnote", () => {
+    const html = `<p>This collection offers soft variation, glossy depth, and handcrafted character.</p>
+      <p>Finish Semi-Gloss Semi-Gloss Edge Natural</p>
+      <p>Variations in shade, texture and edge profile are inherent in all glass and ceramic tiles. *Proper installation methods must be followed per project. Please reference TCNA for more information.</p>`;
+    const product = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Atlas",
+        finishLegend: ["glossy"],
+        footnotes: [
+          "Variations in shade, texture and edge profile are inherent in all glass and ceramic tiles. *Proper installation methods must be followed per project. Please reference TCNA for more information.",
+          "*Proper installation methods must be followed per project. Please reference TCNA for more information.",
+        ],
+        colors: [{ name: "Alabaster", imageUrl: "https://cdn.example/alabaster.jpg" }],
+        sizes: [{ label: '4"x4" mosaic', iconKind: "mosaic" }],
+      }),
+      { pageHtml: html, pageTitle: "Atlas", sourceText: html },
+    );
+    assert.deepEqual(product.finishLegend, ["semi-gloss"]);
+    assert.equal(product.footnotes.length, 1);
+    assert.match(product.footnotes[0], /please reference tcna for more information/i);
+  });
+
+  it("does not show a deco swatch when the deco is only a special piece", () => {
+    const html = `<p>30x30 cm 12" x 12" Deco</p>`;
+    const product = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Alchemy",
+        colors: [
+          {
+            name: "Navy",
+            imageUrl: "https://cdn.example/navy.jpg",
+            decoImageUrl: "https://cdn.example/navy-deco.jpg",
+          },
+        ],
+        sizes: [{ label: '24"x48"', iconKind: "rectangle" }],
+      }),
+      { pageHtml: html, pageTitle: "Alchemy", sourceText: "Alchemy porcelain" },
+    );
+    assert.equal(product.colors[0].decoImageUrl, undefined);
+    assert.equal(product.sizes.some((size) => size.isDeco), false);
+    assert.ok((product.specialPieces ?? []).some((piece) => /deco/i.test(piece)));
+  });
 });

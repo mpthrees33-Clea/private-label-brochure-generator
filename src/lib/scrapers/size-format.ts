@@ -64,6 +64,8 @@ export function canonicalFinish(raw: string | null | undefined): string | null {
   if (/3d\s*plus|3dplus/.test(s)) return "3d plus";
   if (/^3d$/.test(s) || /\b3d\b/.test(s)) return "3d";
   if (/\bsilk\b/.test(s)) return "silk";
+  // "semi-gloss" contains "gloss". Keep it distinct from a full gloss.
+  if (/semi\s*gloss/.test(s)) return "semi-gloss";
   if (/gloss/.test(s)) return "glossy";
   if (/polish|lappato/.test(s)) return "polished";
   if (/grip|non slip|structured|antislip|anti slip/.test(s)) return "grip";

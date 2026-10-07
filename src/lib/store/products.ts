@@ -44,7 +44,9 @@ async function load(): Promise<Product[]> {
     let merged = missingSeeds.length > 0 ? [...products, ...missingSeeds] : products;
     const backfill = backfillSeedPlaceholders(merged);
     merged = backfill.products;
-    if (missingSeeds.length > 0 || backfill.changed) {
+    const deduped = dedupeByFactoryUrl(merged);
+    merged = deduped.products;
+    if (missingSeeds.length > 0 || backfill.changed || deduped.changed) {
       writeJsonStore(PATHNAME, merged).catch(() => {});
     }
     return merged;
@@ -82,7 +84,12 @@ export function normalizeFactoryUrl(raw: string): string {
         params.append(k, v);
       }
     });
-    const qs = params.toString();
+    const keys = [...new Set([...params.keys()])].sort();
+    const sorted = new URLSearchParams();
+    for (const key of keys) {
+      for (const value of params.getAll(key).sort()) sorted.append(key, value);
+    }
+    const qs = sorted.toString();
     return `${host}${path}${qs ? `?${qs}` : ""}`;
   } catch {
     return raw.trim().toLowerCase();
@@ -92,13 +99,45 @@ export function normalizeFactoryUrl(raw: string): string {
 export async function findByFactoryUrl(url: string): Promise<Product | null> {
   const target = normalizeFactoryUrl(url);
   const all = await load();
-  return all.find((p) => normalizeFactoryUrl(p.factoryUrl) === target) ?? null;
+  return all.find((p) => p.factoryUrl && normalizeFactoryUrl(p.factoryUrl) === target) ?? null;
+}
+
+/** Keep one record per factory URL. A later edit wins. PDF uploads have no URL and stay. */
+export function dedupeByFactoryUrl(products: Product[]): { products: Product[]; changed: boolean } {
+  const seen = new Map<string, { product: Product; index: number }>();
+  const drop = new Set<number>();
+  products.forEach((product, index) => {
+    if (!product.factoryUrl?.trim()) return;
+    const key = normalizeFactoryUrl(product.factoryUrl);
+    const prev = seen.get(key);
+    if (!prev) {
+      seen.set(key, { product, index });
+      return;
+    }
+    const prevTime = prev.product.updatedAt || prev.product.createdAt || "";
+    const nextTime = product.updatedAt || product.createdAt || "";
+    if (nextTime > prevTime) {
+      drop.add(prev.index);
+      seen.set(key, { product, index });
+    } else {
+      drop.add(index);
+    }
+  });
+  if (drop.size === 0) return { products, changed: false };
+  return { products: products.filter((_, index) => !drop.has(index)), changed: true };
 }
 
 export async function createProduct(
   input: Omit<Product, "id" | "createdAt" | "updatedAt">,
 ): Promise<Product> {
   const all = await load();
+  if (input.factoryUrl?.trim()) {
+    const target = normalizeFactoryUrl(input.factoryUrl);
+    const existing = all.find(
+      (row) => row.factoryUrl && normalizeFactoryUrl(row.factoryUrl) === target,
+    );
+    if (existing) return existing;
+  }
   const now = new Date().toISOString();
   const product: Product = {
     ...input,
