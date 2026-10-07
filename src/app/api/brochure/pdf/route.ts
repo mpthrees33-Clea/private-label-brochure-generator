@@ -7,6 +7,7 @@ import { scrapedToBrochure } from "@/lib/scraped-to-brochure";
 import { findByFactoryUrl, getProduct, listProducts } from "@/lib/store/products";
 import { chooseTrinityName } from "@/lib/trinity-names";
 import { withFactoryLayoutDefaults } from "@/lib/store/factory-layout-defaults";
+import { withScrapedFinish } from "@/lib/finish-legend-server";
 import {
   missingBrochureFields,
   MISSING_FIELD_LABELS,
@@ -112,7 +113,7 @@ async function renderSaved(
       { status: 422 },
     );
   }
-  const withLayout = await withFactoryLayoutDefaults(product);
+  const withLayout = await withScrapedFinish(await withFactoryLayoutDefaults(product));
   return {
     data: withLayout,
     factoryName: product.factoryName,

@@ -61,6 +61,8 @@ export interface SwatchLayout {
   faceRatios: number[];
   /** Pixel boxes of the tallest color, matching the vertical budget. */
   faceBoxes: { width: number; height: number }[];
+  /** Color name printed once under format captions, in addition to each face. */
+  extraLabels: number;
 }
 
 export function swatchBlockHeight(layout: SwatchLayout): number {
@@ -75,8 +77,7 @@ export function swatchBlockHeight(layout: SwatchLayout): number {
           0,
         );
   const faceCount = boxes.length > 0 ? boxes.length : Math.max(1, layout.faceRatios.length);
-  const innerGaps = Math.max(0, faceCount - 1) * SWATCH_ROW_GAP;
-  const groupH = imageStack + faceCount * labelH + innerGaps;
+  const groupH = imageStack + groupCaptionChrome(faceCount, labelH, layout.extraLabels || 0);
   return (
     layout.primaryRows * groupH +
     Math.max(0, layout.primaryRows - 1) * SWATCH_ROW_GAP
@@ -95,16 +96,37 @@ export function sizeMatrixTop(layout: SwatchLayout): number {
 // under the chart; another row of slightly smaller tiles fills it.
 const MAX_PRIMARY_ROWS = 3;
 
-/** How many caption lines a color name needs at this swatch width. Capped at 2. */
+/** How many caption lines the name actually uses at this swatch width. */
 export function swatchLabelLines(name: string, width: number): number {
-  return Math.min(2, labelLinesAt(name, width, 11));
+  return labelLinesAt(name, width, swatchLabelFontSize(name, width));
 }
 
-const LABEL_CHAR_WIDTH = 0.62;
+// DM Sans widths in em, measured from the brochure face. Captions are
+// rendered lowercase, so one table covers letters and digits. A flat
+// average clips "ultramarine" (narrow letters) or overflows "sandbank".
+const GLYPH_EM: Record<string, number> = {
+  a: 0.54, b: 0.63, c: 0.57, d: 0.63, e: 0.57, f: 0.34, g: 0.56, h: 0.58,
+  i: 0.24, j: 0.24, k: 0.5, l: 0.22, m: 0.89, n: 0.57, o: 0.59, p: 0.63,
+  q: 0.63, r: 0.37, s: 0.5, t: 0.39, u: 0.57, v: 0.53, w: 0.76, x: 0.5,
+  y: 0.56, z: 0.46,
+  "0": 0.68, "1": 0.31, "2": 0.58, "3": 0.59, "4": 0.61, "5": 0.61,
+  "6": 0.63, "7": 0.53, "8": 0.61, "9": 0.63,
+};
+const SPACE_EM = 0.26;
+const UNKNOWN_EM = 0.7;
+
+function textWidthPx(text: string, fontSize: number): number {
+  let em = 0;
+  for (const ch of text) {
+    if (ch === " ") em += SPACE_EM;
+    else em += GLYPH_EM[ch] ?? UNKNOWN_EM;
+  }
+  return em * fontSize;
+}
 
 /** Largest caption size that fits in two lines. A one-word name shrinks to one line when it still stays readable. */
 export function swatchLabelFontSize(text: string, width: number): number {
-  const name = text.trim();
+  const name = text.trim().toLowerCase();
   if (!name || width <= 0) return 11;
   let fontSize = 11;
   while (fontSize > 8 && labelLinesAt(name, width, fontSize) > 2) fontSize -= 0.5;
@@ -117,27 +139,52 @@ export function swatchLabelFontSize(text: string, width: number): number {
 }
 
 function labelLinesAt(text: string, width: number, fontSize: number): number {
-  const name = text.trim();
-  if (!name) return 1;
-  const perLine = Math.max(1, Math.floor(width / (fontSize * LABEL_CHAR_WIDTH)));
+  const name = text.trim().toLowerCase();
+  if (!name || width <= 0) return 1;
   const words = name.split(/\s+/);
+  const space = SPACE_EM * fontSize;
+  const fits = (px: number) => px <= width + 0.25;
   let lines = 1;
-  let column = 0;
-  for (const word of words) {
-    if (word.length > perLine) {
-      const chunks = Math.ceil(word.length / perLine);
-      lines += column === 0 ? chunks - 1 : chunks;
-      column = word.length % perLine;
-      continue;
+  let used = 0;
+  const placeWord = (word: string) => {
+    const wordPx = textWidthPx(word, fontSize);
+    if (used === 0) {
+      if (fits(wordPx)) used = wordPx;
+      else used = breakWord(word, width, fontSize, (extra) => { lines += extra; });
+      return;
     }
-    if (column === 0) column = word.length;
-    else if (column + 1 + word.length <= perLine) column += 1 + word.length;
-    else {
-      lines += 1;
-      column = word.length;
+    if (fits(used + space + wordPx)) {
+      used += space + wordPx;
+      return;
     }
-  }
+    lines += 1;
+    if (fits(wordPx)) used = wordPx;
+    else used = breakWord(word, width, fontSize, (extra) => { lines += extra; });
+  };
+  for (const word of words) placeWord(word);
   return Math.max(1, lines);
+}
+
+function breakWord(
+  word: string,
+  width: number,
+  fontSize: number,
+  addLines: (count: number) => void,
+): number {
+  let used = 0;
+  for (const ch of word) {
+    const glyph = textWidthPx(ch, fontSize);
+    if (used > 0 && used + glyph > width + 0.25) {
+      addLines(1);
+      used = glyph;
+    } else used += glyph;
+  }
+  return used;
+}
+
+function groupCaptionChrome(faceCount: number, labelHeight: number, extraLabels: number): number {
+  const innerGaps = Math.max(0, faceCount - 1) * SWATCH_ROW_GAP;
+  return (faceCount + extraLabels) * labelHeight + innerGaps + extraLabels * SWATCH_ROW_GAP;
 }
 
 export interface NominalInches {
@@ -151,6 +198,7 @@ export function computeSwatchLayout(
   names: string[] = [],
   faceRatios?: number[][],
   faceInches?: (NominalInches | null)[][],
+  extraLabels = 0,
 ): SwatchLayout {
   const ratiosFor = (index: number): number[] => {
     const custom = faceRatios?.[index];
@@ -185,6 +233,7 @@ export function computeSwatchLayout(
     labelHeight: SWATCH_LABEL_H,
     faceRatios: ratios,
     faceBoxes: [],
+    extraLabels,
   });
 
   if (colorCount <= 0) return empty(ratiosFor(0));
@@ -229,8 +278,7 @@ export function computeSwatchLayout(
       if (seenRows.has(primaryRows)) continue;
       seenRows.add(primaryRows);
 
-      const innerGaps = Math.max(0, faceCount - 1) * SWATCH_ROW_GAP;
-      const groupChrome = faceCount * labelHeight + innerGaps;
+      const groupChrome = groupCaptionChrome(faceCount, labelHeight, extraLabels);
       const rowGaps = Math.max(0, primaryRows - 1) * SWATCH_ROW_GAP;
       const availImagesV = Math.max(0, availV - primaryRows * groupChrome - rowGaps);
       const maxColumnPx = Math.floor(
@@ -260,6 +308,7 @@ export function computeSwatchLayout(
         labelHeight,
         faceRatios: tallestRatios,
         faceBoxes,
+        extraLabels,
         minShort,
       });
     }
@@ -299,12 +348,26 @@ export function computeSwatchLayout(
       labelHeight: chosen.labelHeight,
       faceRatios: chosen.faceRatios,
       faceBoxes: chosen.faceBoxes,
+      extraLabels,
     };
   };
 
-  const single = pick(SWATCH_LABEL_H);
-  const wraps = names.some((name) => swatchLabelLines(name, single.width) > 1);
-  return wraps ? pick(SWATCH_LABEL_H_2) : single;
+  const captionHeight = (width: number): number => {
+    const counts = names.filter((name) => name.trim()).map((name) => swatchLabelLines(name, width));
+    const lines = counts.length > 0 ? Math.max(...counts) : 1;
+    if (lines <= 1) return SWATCH_LABEL_H;
+    if (lines === 2) return SWATCH_LABEL_H_2;
+    return 4 + lines * 13;
+  };
+  let layout = pick(SWATCH_LABEL_H);
+  let reserved = SWATCH_LABEL_H;
+  for (let pass = 0; pass < 4; pass++) {
+    const needed = captionHeight(layout.width);
+    if (needed <= reserved) break;
+    reserved = needed;
+    layout = pick(reserved);
+  }
+  return layout;
 }
 
 function clampRatio(ratio: number): number {
@@ -330,8 +393,16 @@ export function getSwatchLayout(data: BrochureData): SwatchLayout {
     }),
   );
   const hasDeco = resolved.some((faces) => faces.some((face) => /\bdeco\b/i.test(face.caption)));
-  const names = resolved.flatMap((faces) => faces.map((face) => face.caption));
-  return computeSwatchLayout(data.colors.length, hasDeco, names, ratios, inches);
+  const showsGroupName = (faces: { formatLabel?: string }[]) =>
+    faces.filter((face) => face.formatLabel).length >= 2;
+  const extraLabels = resolved.some(showsGroupName) ? 1 : 0;
+  const names = data.colors.flatMap((color, index) => {
+    const faces = resolved[index];
+    const captions = faces.map((face) => face.caption);
+    if (showsGroupName(faces)) captions.push(color.trinityName);
+    return captions;
+  });
+  return computeSwatchLayout(data.colors.length, hasDeco, names, ratios, inches, extraLabels);
 }
 
 /** Default page-relative coords for every draggable block. Page is which

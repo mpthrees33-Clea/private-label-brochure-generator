@@ -66,13 +66,40 @@ describe("page 2 swatch stack", () => {
     assert.equal(computeSwatchLayout(4, false, [], ratiosFor(4, [0.5])).labelHeight, 22);
     assert.equal(short.labelHeight, 22);
     assert.equal(swatchLabelLines("lagoon", short.width), 1);
-    assert.equal(wrapped.labelHeight, 32);
-    assert.equal(swatchLabelLines(longName, wrapped.width), 2);
-    assert.ok(swatchLabelFontSize("ultramarine", 43) >= 8);
-    assert.ok(swatchLabelFontSize("sandbank", 43) <= 9);
-    assert.equal(swatchLabelLines("ultramarine", 43), 2);
+    const wrappedLines = swatchLabelLines(longName, wrapped.width);
+    assert.ok(wrappedLines >= 2, `expected a wrap, got ${wrappedLines} at ${wrapped.width}px`);
+    assert.ok(
+      wrapped.labelHeight >= 4 + wrappedLines * 12,
+      `label ${wrapped.labelHeight} does not cover ${wrappedLines} lines`,
+    );
+    assert.equal(swatchLabelFontSize("ultramarine", 43), 8);
+    assert.equal(swatchLabelLines("ultramarine", 43), 1);
+    assert.equal(swatchLabelLines("sandbank", 43), 1);
+    assert.equal(swatchLabelLines("snowland", 43), 1);
+    assert.ok(swatchLabelFontSize("sandbank", 43) >= 9);
+    assert.ok(swatchLabelFontSize("sandbank", 43) <= 11);
     assert.ok(sizeMatrixTop(wrapped) >= sizeMatrixTop(short));
     assert.equal(wrapped.height, wrapped.width * 2);
+  });
+
+  it("reserves room for the color name under format captions", () => {
+    const ratios = ratiosFor(4, [1, 1]);
+    const inches = Array.from({ length: 4 }, () => [
+      { widthIn: 12, heightIn: 12 },
+      { widthIn: 12, heightIn: 12 },
+    ]);
+    const bare = computeSwatchLayout(4, false, ["4x4 mosaic", "trapezoid"], ratios, inches, 0);
+    const named = computeSwatchLayout(
+      4,
+      false,
+      ["4x4 mosaic", "trapezoid", "alabaster"],
+      ratios,
+      inches,
+      1,
+    );
+    assert.equal(named.extraLabels, 1);
+    assert.ok(named.faceBoxes[0].width < bare.faceBoxes[0].width);
+    assert.ok(sizeMatrixTop(named) >= sizeMatrixTop(bare));
   });
 
   it("uses the tile ratio instead of a fixed portrait crop", () => {
