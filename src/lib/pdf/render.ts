@@ -1,6 +1,7 @@
 import puppeteer, { type Browser } from "puppeteer-core";
 import chromium from "@sparticuz/chromium-min";
 import { PDFDocument } from "pdf-lib";
+import { isLoopbackOrigin } from "./origin";
 
 // @sparticuz/chromium-min downloads the chromium binary + shared libs
 // from GitHub releases to /tmp at runtime. This avoids the libnss3
@@ -86,10 +87,20 @@ export async function renderBrochurePdf(brochureUrl: string): Promise<Uint8Array
   const page = await browser.newPage();
   try {
     await page.setViewport({ width: 816, height: 1056, deviceScaleFactor: 2 });
+    // Only when an operator points PDF_RENDER_ORIGIN at a host that still
+    // challenges with HTTP basic auth. Loopback (the default) does not.
+    // Credentials stay in the environment — never in the repo.
+    const basic = basicAuthFor(brochureUrl);
+    if (basic) await page.authenticate(basic);
     // domcontentloaded is enough — Next.js RSC streaming keeps a connection
     // open so networkidle0 would never fire. We manually wait for all images
     // to finish loading below, which is the actual signal we care about.
-    await page.goto(brochureUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    try {
+      await page.goto(brochureUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to open brochure page ${brochureUrl}: ${msg}`);
+    }
     // Wait for every image to load OR error OR hit a per-image timeout.
     // A hanging factory image (slow CDN, dead URL) used to keep this
     // promise pending until the Vercel function killed the request,
@@ -151,4 +162,13 @@ export async function renderBrochurePdf(brochureUrl: string): Promise<Uint8Array
     // Close the page but keep the browser warm for the next invocation.
     await page.close().catch(() => {});
   }
+}
+
+function basicAuthFor(brochureUrl: string): { username: string; password: string } | null {
+  if (isLoopbackOrigin(brochureUrl)) return null;
+  const raw = process.env.PDF_RENDER_BASIC_AUTH?.trim();
+  if (!raw) return null;
+  const idx = raw.indexOf(":");
+  if (idx <= 0) return null;
+  return { username: raw.slice(0, idx), password: raw.slice(idx + 1) };
 }

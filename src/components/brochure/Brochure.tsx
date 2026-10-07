@@ -30,7 +30,7 @@ const SWATCH_LABEL_H = 18;
 const SWATCH_ROW_GAP_BETWEEN_ROWS = 8;
 
 function defaultSizeMatrixY(data: BrochureData, swatch: SwatchLayout): number {
-  const hasDeco = data.colors.some((c) => c.decoImageUrl);
+  const hasDeco = data.colors.some((c) => c.decoImageUrl && c.decoImageUrl.trim());
   const visualRowsPerPrimary = hasDeco ? 2 : 1;
   const visualRows = swatch.primaryRows * visualRowsPerPrimary;
   const swatchH =
@@ -143,6 +143,7 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
           sizes={data.sizes}
           colors={data.colors}
           availability={data.availability}
+          availabilityFinishes={data.availabilityFinishes}
           finishLegend={data.finishLegend}
         />
         {(data.finishLegend.length > 0 || data.footnotes.length > 0) && (

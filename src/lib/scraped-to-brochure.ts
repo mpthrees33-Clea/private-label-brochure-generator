@@ -28,6 +28,7 @@ export function scrapedToBrochure(
       finishes: s.finishes,
     })),
     availability: lowercaseKeys(p.availability),
+    availabilityFinishes: lowercaseFinishMap(p.availabilityFinishes),
     finishLegend: p.finishLegend,
     footnotes: p.footnotes,
     techSpecs: p.techSpecs,
@@ -39,5 +40,16 @@ function lowercaseKeys(
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const [k, v] of Object.entries(o)) out[k.toLowerCase()] = v;
+  return out;
+}
+
+function lowercaseFinishMap(
+  o: Record<string, Record<string, string[]>> | undefined,
+): Record<string, Record<string, string[]>> | undefined {
+  if (!o) return undefined;
+  const out: Record<string, Record<string, string[]>> = {};
+  for (const [color, sizes] of Object.entries(o)) {
+    out[color.toLowerCase()] = sizes;
+  }
   return out;
 }

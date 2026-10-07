@@ -46,6 +46,10 @@ export interface ScrapedProduct {
   colors: ScrapedColor[];
   sizes: ScrapedSize[];
   availability: Record<string, string[]>;
+  /** color (lowercase) → size chart label → finishes actually offered.
+   *  Set when a color doesn't come in every finish of that size
+   *  (cream subway is glossy only; white is glossy and matte). */
+  availabilityFinishes?: Record<string, Record<string, string[]>>;
   techSpecs: Partial<TechSpecs>;
   finishLegend: string[];
   footnotes: string[];

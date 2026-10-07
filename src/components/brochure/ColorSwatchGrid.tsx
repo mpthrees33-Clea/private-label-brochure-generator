@@ -16,7 +16,7 @@ export function ColorSwatchGrid({
   swatchWidth: number;
   perRow: number;
 }) {
-  const hasDeco = colors.some((c) => c.decoImageUrl);
+  const hasDeco = colors.some((c) => c.decoImageUrl && c.decoImageUrl.trim());
   const chunks: BrochureColor[][] = [];
   for (let i = 0; i < colors.length; i += perRow) {
     chunks.push(colors.slice(i, i + perRow));
@@ -51,7 +51,17 @@ function SwatchRow({
     >
       {colors.map((c) => {
         const src = deco ? c.decoImageUrl ?? undefined : c.imageUrl;
-        const label = deco ? `${c.trinityName} deco` : c.trinityName;
+        const baseName = c.trinityName.replace(/\s+deco$/i, "");
+        const label = deco ? `${baseName} deco` : c.trinityName;
+        if (deco && !src) {
+          return (
+            <div
+              key={c.trinityName + "-deco-empty"}
+              style={{ width: swatchWidth }}
+              aria-hidden
+            />
+          );
+        }
         return (
           <div
             key={c.trinityName + (deco ? "-deco" : "")}

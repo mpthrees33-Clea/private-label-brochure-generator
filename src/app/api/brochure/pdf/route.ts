@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { renderBrochurePdf } from "@/lib/pdf/render";
+import { resolveBrochureRenderOrigin } from "@/lib/pdf/origin";
 import { getProduct } from "@/lib/store/products";
 import {
   missingBrochureFields,
@@ -58,12 +59,15 @@ export async function GET(req: NextRequest) {
     filename = `${product.trinityName || source}.pdf`;
   }
 
-  const host = req.headers.get("host") ?? "localhost:3000";
-  const protocol = req.headers.get("x-forwarded-proto") ?? "https";
-  const origin =
-    process.env.VERCEL || host !== "localhost:3000"
-      ? `${protocol}://${host}`
-      : `http://${host}`;
+  // Loopback, not the public Host. nginx basic auth in front of
+  // brochures.clea-solutions.ai rejects headless Chrome with
+  // net::ERR_INVALID_AUTH_CREDENTIALS. Node is already behind that proxy.
+  const origin = resolveBrochureRenderOrigin({
+    hostHeader: req.headers.get("host"),
+    forwardedProto: req.headers.get("x-forwarded-proto"),
+    portEnv: process.env.PORT,
+    overrideEnv: process.env.PDF_RENDER_ORIGIN,
+  });
   const target = `${origin}${renderPath}`;
 
   try {

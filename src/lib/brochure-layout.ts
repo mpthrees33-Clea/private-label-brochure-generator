@@ -89,7 +89,7 @@ export function computeSwatchLayout(
 }
 
 export function getSwatchLayout(data: BrochureData): SwatchLayout {
-  const hasDeco = data.colors.some((c) => c.decoImageUrl);
+  const hasDeco = data.colors.some((c) => !!c.decoImageUrl && c.decoImageUrl.trim() !== "");
   return computeSwatchLayout(data.colors.length, hasDeco);
 }
 

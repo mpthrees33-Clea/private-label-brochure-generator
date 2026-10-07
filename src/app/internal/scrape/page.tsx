@@ -148,6 +148,10 @@ export default function ScrapeFormPage() {
           </button>
           {error && <span className="text-xs text-danger">{error}</span>}
         </div>
+        <p className="text-xs text-fg-faint">
+          Extraction usually takes 1–2 minutes. You&rsquo;ll see progress on
+          the next screen, and a specific error if the page can&rsquo;t be read.
+        </p>
       </form>
 
       <section className="mt-12">

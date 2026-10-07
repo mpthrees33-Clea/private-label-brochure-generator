@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sniffImageMime } from "@/lib/image-sniff";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,43 +33,72 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const upstream = await fetch(parsed.toString(), {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        // Some factory CDNs require a same-origin Referer to avoid
-        // hotlink blocks. Set it to the image's own origin.
-        Referer: parsed.origin + "/",
-        Accept: "image/*,*/*;q=0.8",
-      },
-      redirect: "follow",
-    });
-    if (!upstream.ok) {
-      return NextResponse.json(
-        { error: `Upstream ${upstream.status}` },
-        { status: 502 },
-      );
+    const buf = await fetchImageBytes(parsed);
+    if (!buf) {
+      return NextResponse.json({ error: "Upstream image fetch failed" }, { status: 502 });
     }
-    const contentType =
-      upstream.headers.get("content-type") ?? "application/octet-stream";
-    if (!contentType.toLowerCase().startsWith("image/")) {
+    const sniffed = sniffImageMime(new Uint8Array(buf.bytes));
+    const headerType = buf.contentType.toLowerCase();
+    const contentType = headerType.startsWith("image/")
+      ? buf.contentType
+      : sniffed;
+    if (!contentType) {
       return NextResponse.json(
-        { error: `Not an image (Content-Type: ${contentType})` },
+        { error: `Not an image (Content-Type: ${buf.contentType || "unknown"})` },
         { status: 415 },
       );
     }
-    const buf = await upstream.arrayBuffer();
-    return new NextResponse(buf, {
+    return new NextResponse(buf.bytes, {
       status: 200,
       headers: {
         "Content-Type": contentType,
         // 1 day in browser, 7 days at CDN.
         "Cache-Control": "public, max-age=86400, s-maxage=604800, immutable",
-        "Content-Length": String(buf.byteLength),
+        "Content-Length": String(buf.bytes.byteLength),
       },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: `Fetch failed: ${msg}` }, { status: 502 });
   }
+}
+
+const IMAGE_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+async function fetchImageBytes(
+  parsed: URL,
+): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  // Some CDNs 403 a same-origin Referer and some 403 the absence of one.
+  // Try with the image origin as Referer, then once without.
+  const attempts: Array<Record<string, string>> = [
+    {
+      "User-Agent": IMAGE_UA,
+      Referer: parsed.origin + "/",
+      Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    },
+    {
+      "User-Agent": IMAGE_UA,
+      Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    },
+  ];
+  for (const headers of attempts) {
+    try {
+      const upstream = await fetch(parsed.toString(), {
+        headers,
+        redirect: "follow",
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!upstream.ok) continue;
+      const bytes = await upstream.arrayBuffer();
+      if (bytes.byteLength === 0) continue;
+      return {
+        bytes,
+        contentType: upstream.headers.get("content-type") ?? "",
+      };
+    } catch {
+      // try the next header set
+    }
+  }
+  return null;
 }

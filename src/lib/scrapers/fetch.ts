@@ -47,24 +47,73 @@ export async function fetchAndCleanPage(url: string, html: string): Promise<Fetc
   ).remove();
   $("[hidden], [aria-hidden=true]").remove();
 
+  // og:image is often the only room-scene hero, and it lives in <meta>,
+  // which we strip below. Promote it to a real <img> first.
+  const ogImage =
+    $('meta[property="og:image"]').attr("content") ||
+    $('meta[name="og:image"]').attr("content");
+  if (ogImage) {
+    try {
+      const absolute = new URL(ogImage, url).toString();
+      $("body").prepend(`<img src="${absolute}" alt="room scene hero">`);
+    } catch {
+      // ignore unparseable og:image
+    }
+  }
+
+  // <picture><source srcset> often holds the real file while <img src>
+  // is a 1×1 placeholder. Copy the best candidate onto the img.
+  $("picture source[srcset], picture source[data-srcset]").each((_, el) => {
+    const $source = $(el);
+    const best =
+      bestUrlFromSrcset($source.attr("srcset")) ||
+      bestUrlFromSrcset($source.attr("data-srcset"));
+    if (!best) return;
+    const img = $source.parent().find("img").first();
+    if (!img.length) return;
+    const current = img.attr("src") || "";
+    if (!current || isPlaceholderSrc(current)) img.attr("src", best);
+  });
+
   // Resolve relative image and link URLs against the base URL so Claude
   // can return absolute image URLs. Also pull from srcset / data-srcset
   // which many lazy-loading frameworks (WordPress, Shopify, Yoast) use
-  // instead of src.
+  // instead of src. Prefer the largest srcset candidate — the last
+  // entry is often a small crop, not the high-res file.
   $("img").each((_, el) => {
     const $img = $(el);
-    const src =
-      $img.attr("src") ||
+    const srcsetBest =
+      bestUrlFromSrcset($img.attr("srcset")) ||
+      bestUrlFromSrcset($img.attr("data-srcset")) ||
+      bestUrlFromSrcset($img.attr("data-lazy-srcset"));
+    const lazy =
       $img.attr("data-src") ||
       $img.attr("data-lazy-src") ||
       $img.attr("data-original") ||
-      firstUrlFromSrcset($img.attr("srcset")) ||
-      firstUrlFromSrcset($img.attr("data-srcset")) ||
-      firstUrlFromSrcset($img.attr("data-lazy-srcset"));
+      "";
+    const rawSrc = $img.attr("src") || "";
+    const src =
+      (rawSrc && !isPlaceholderSrc(rawSrc) ? rawSrc : "") ||
+      (lazy && !isPlaceholderSrc(lazy) ? lazy : "") ||
+      srcsetBest ||
+      rawSrc ||
+      lazy;
     const alt = $img.attr("alt") || "";
     if (!src) {
       $img.remove();
       return;
+    }
+    // Drop the tiny `_public` twin when the card also has `_larger`.
+    if (/_public\.(png|jpe?g|webp)$/i.test(src)) {
+      const hasLarger = $img
+        .parent()
+        .find("img")
+        .toArray()
+        .some((img) => ($(img).attr("src") || "").includes("_larger."));
+      if (hasLarger) {
+        $img.remove();
+        return;
+      }
     }
     try {
       const absoluteSrc = new URL(src, url).toString();
@@ -90,15 +139,35 @@ export async function fetchAndCleanPage(url: string, html: string): Promise<Fetc
   return { url, cleanedHtml: body, title, anchors };
 }
 
-function firstUrlFromSrcset(srcset: string | undefined): string | undefined {
+function bestUrlFromSrcset(srcset: string | undefined): string | undefined {
   if (!srcset) return undefined;
   // srcset format: "url1 1x, url2 2x" or "url1 100w, url2 200w".
-  // Take the LARGEST candidate (last entry) so we get the highest-res
-  // image — swatches benefit from sharpness when downscaled by the
-  // brochure renderer.
-  const candidates = srcset
-    .split(",")
-    .map((s) => s.trim().split(/\s+/)[0])
-    .filter(Boolean);
-  return candidates[candidates.length - 1];
+  // Width descriptors are not sorted — Ragno lists 1024w in the middle
+  // and a 415w crop last. Score the descriptor and keep the largest.
+  let bestUrl: string | undefined;
+  let bestScore = -1;
+  for (const part of srcset.split(",")) {
+    const bits = part.trim().split(/\s+/);
+    const candidate = bits[0];
+    if (!candidate || isPlaceholderSrc(candidate)) continue;
+    const desc = bits[1] ?? "";
+    const width = /^(\d+)w$/i.exec(desc);
+    const scale = /^([\d.]+)x$/i.exec(desc);
+    const score = width
+      ? Number(width[1])
+      : scale
+        ? Number(scale[1]) * 1000
+        : 1;
+    if (score > bestScore) {
+      bestScore = score;
+      bestUrl = candidate;
+    }
+  }
+  return bestUrl;
+}
+
+function isPlaceholderSrc(src: string): boolean {
+  return /data:image|spacer|blank\.gif|1x1|pixel\.gif|placeholder|transparent\.gif/i.test(
+    src,
+  );
 }

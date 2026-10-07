@@ -1,6 +1,8 @@
 import { fetchAndCleanPage } from "./fetch";
 import { scrapeFromPdfWithAI, scrapeWithAI } from "./ai";
+import { extractCatalog } from "./catalog";
 import { enrichTechSpecs, nonNullSpecCount } from "./tech-specs";
+import { improveProductImages } from "./images";
 import type { ScrapedProduct } from "./types";
 
 // Module-level cache. Survives within a warm serverless function
@@ -63,6 +65,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
   }
 
   const html = await res.text();
+  const catalog = extractCatalog(html, url);
   const page = await fetchAndCleanPage(url, html);
   if (page.cleanedHtml.length < MIN_CLEANED_HTML_CHARS) {
     throw new Error(
@@ -71,7 +74,10 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
         `Try the direct factory product URL or upload the PDF.`,
     );
   }
-  const product = await scrapeWithAI(url, page.cleanedHtml, page.title);
+  const product = await scrapeWithAI(url, page.cleanedHtml, page.title, catalog);
+  await improveProductImages(product, catalog).catch((err) => {
+    console.error("improveProductImages failed:", err);
+  });
 
   // Deep tech-spec pass: factories usually only print 1-2 specs on the
   // product page itself. The full table lives on a linked "Technical

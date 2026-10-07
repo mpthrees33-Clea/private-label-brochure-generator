@@ -35,6 +35,9 @@ export interface BrochureData {
   sizes: BrochureSize[];
   /** Map of color trinityName → list of size labels that are available */
   availability: Record<string, string[]>;
+  /** color → size chart label → finishes for that cell. Overrides the
+   *  size-level finish list when a color is missing a finish. */
+  availabilityFinishes?: Record<string, Record<string, string[]>>;
   /** Legend bullets shown next to the sizes matrix, e.g. ["matte", "textured"] */
   finishLegend: string[];
   /** Optional footnotes shown under the sizes matrix */
