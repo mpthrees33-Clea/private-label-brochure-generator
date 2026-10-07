@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   groundTechSpecs,
   parseTechSpecItems,
+  parseTechSpecs,
   parseTechSpecsDetailed,
   parseTechSpecsFromHtml,
   type SpecTextItem,
@@ -167,7 +168,8 @@ describe("tech spec parsing", () => {
     const specs = parseTechSpecsFromHtml(html);
     assert.equal(specs.thickness, '0.34"');
     assert.equal(specs.shadeVariation, "v4");
-    assert.equal(specs.dcof, "0.42 · R10");
+    assert.equal(specs.dcof, "0.42");
+    assert.equal(specs.slipResistance, "R10");
   });
 
   it("reads a sku spec block that prints variation, slip, and inch thickness", () => {
@@ -178,7 +180,8 @@ describe("tech spec parsing", () => {
     const specs = parseTechSpecsFromHtml(html);
     assert.equal(specs.thickness, '0.34"');
     assert.equal(specs.shadeVariation, "v4");
-    assert.equal(specs.dcof, "0.42 · R10");
+    assert.equal(specs.dcof, "0.42");
+    assert.equal(specs.slipResistance, "R10");
   });
 
   it("does not treat separate v ratings as a printed range", () => {
@@ -216,9 +219,11 @@ describe("tech spec parsing", () => {
     assert.equal(parsed.specs.stainResistance, "class 5");
     assert.equal(parsed.specs.thickness, "6.5mm | 8.5mm");
     assert.match(parsed.specs.dcof || "", /0\.42/);
-    assert.match(parsed.specs.dcof || "", /R9/);
-    assert.match(parsed.specs.dcof || "", /R10/);
+    assert.equal(/R\d/.test(parsed.specs.dcof || ""), false);
+    assert.match(parsed.specs.slipResistance || "", /R9/);
+    assert.match(parsed.specs.slipResistance || "", /R10/);
     assert.equal(parsed.specs.dcof?.includes("0.40"), false);
+    assert.match(parsed.standards.slipResistance || "", /DIN 51130/);
     assert.match(parsed.standards.frostResistance || "", /ISO 10545[-.]12/);
     assert.match(parsed.standards.chemicalResistance || "", /ISO 10545[-.]13/);
     assert.equal(/ASTM/.test(parsed.standards.frostResistance || ""), false);
@@ -259,5 +264,47 @@ describe("tech spec parsing", () => {
       item("WET DCOF t0,55", 220, 200),
     ]);
     assert.equal(specs.dcof, "≥ 0.42 wet | ≥ 0.55 wet");
+  });
+
+  it("does not treat an abrasion volume or a thickness tolerance as the tile", () => {
+    const specs = parseTechSpecs(
+      "Thickness ASTM C499 ± 0.040 in Comply DEEP Abrasion ASTM C1243 <175mm3 ~ 40 mm3",
+    );
+    assert.equal(specs.thickness, undefined);
+    const grounded = groundTechSpecs(
+      { thickness: "40mm" },
+      "Thickness ASTM C499 ± 0.040 in Comply DEEP Abrasion ~ 40 mm3",
+    );
+    assert.equal(grounded.thickness, undefined);
+    const real = parseTechSpecs("nominal thickness 8.5 mm abrasion 40 mm3");
+    assert.equal(real.thickness, "8.5mm");
+  });
+
+  it("reads the declared Mohs value, not the 0-10 scale or a footnote", () => {
+    const specs = parseTechSpecItems([
+      item("HARDNESS (MOHS)", 198, 394),
+      item("ASTM C 1895 - 20", 303, 394),
+      item("Range 0 - 10", 410, 394),
+      item("≥", 523, 394),
+      item("7", 528, 394),
+      item("(2)", 534, 398),
+      item(
+        "Mohs result referring to textured/natural finish. For polished finish: ≥ 6.",
+        44,
+        68,
+      ),
+      item("336282-2", 300, 59),
+    ]);
+    assert.equal(specs.scratchHardness, "≥ 7");
+  });
+
+  it("keeps wet DCOF and DIN ramp ratings in separate fields", () => {
+    const grounded = groundTechSpecs(
+      { dcof: "matte ≥ r9 a | grip ≥ r11 c" },
+      "matte R9 A grip R11 C wet DCOF ≥ 0.42 and ≥ 0.55",
+    );
+    assert.equal(grounded.dcof, undefined);
+    assert.match(grounded.slipResistance || "", /matte R9 A/);
+    assert.match(grounded.slipResistance || "", /grip R11 C/);
   });
 });

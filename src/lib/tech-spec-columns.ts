@@ -14,6 +14,7 @@ const COLUMNS: { key: keyof TechSpecs; label: string; standard?: string }[] = [
   { key: "scratchHardness", label: "scratch hardness", standard: "Mohs" },
   { key: "breakingStrength", label: "breaking strength", standard: "ASTM C648" },
   { key: "dcof", label: "dynamic coefficient of friction", standard: "ANSI A326.3" },
+  { key: "slipResistance", label: "slip resistance", standard: "DIN 51130" },
 ];
 
 export interface TechSpecColumn {

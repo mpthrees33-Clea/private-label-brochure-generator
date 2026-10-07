@@ -9,5 +9,8 @@ describe("private-label names", () => {
     assert.equal(chooseTrinityName("calvert", ["calvert", "caldwell"]), "ashland");
     assert.equal(chooseTrinityName("kendall", []), "ashland");
     assert.equal(chooseTrinityName("keene", ["ashland"]), "keene");
+    assert.equal(chooseTrinityName("halvern", ["halden"], { separate: true }), "ashland");
+    assert.equal(chooseTrinityName("halsted", ["halden"], { separate: true }), "ashland");
+    assert.equal(chooseTrinityName("keene", ["kendall"], { separate: true }), "keene");
   });
 });

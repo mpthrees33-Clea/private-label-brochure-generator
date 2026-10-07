@@ -15,6 +15,8 @@ export interface TechSpecs {
   scratchHardness?: string;
   breakingStrength?: string;
   dcof?: string;
+  /** DIN 51130 / EN 16165 ramp rating (R9–R13). Not an ANSI A326.3 DCOF. */
+  slipResistance?: string;
 }
 
 export interface ScrapedColor {

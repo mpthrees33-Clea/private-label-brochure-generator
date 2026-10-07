@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { INCH_MARK, parseSizeLabel } from "./size-format";
+import { INCH_MARK, parseSizeLabel, refineCoarseInchLabel } from "./size-format";
 import type { ListedFormat } from "./listed-sizes";
 
 // Trims and named decors are often one long line ("Battiscopa 7x80 / 2 7/8\"x32\""),
@@ -148,6 +148,7 @@ interface Occurrence {
   index: number;
   stated: boolean;
   metric: boolean;
+  cm: [number, number] | null;
 }
 
 function findOccurrences(flat: string): Occurrence[] {
@@ -176,10 +177,32 @@ function findOccurrences(flat: string): Occurrence[] {
       index: current.index,
       stated: Boolean(parsed.statedInches),
       metric: Boolean(parsed.fromMetric),
+      cm: centimeters(current.raw),
     });
   }
   shareTwinKinds(out);
+  refineCoarseTwins(out);
   return out;
+}
+
+function centimeters(raw: string): [number, number] | null {
+  const match = raw.match(/(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*cm\b/i);
+  if (!match) return null;
+  return [Number(match[1].replace(",", ".")), Number(match[2].replace(",", "."))];
+}
+
+function refineCoarseTwins(occurrences: Occurrence[]): void {
+  for (const stated of occurrences) {
+    if (!stated.stated) continue;
+    const [width, height] = stated.dim.split("x").map(Number);
+    const twin = occurrences.find((other) => {
+      if (!other.cm || other === stated) return false;
+      const [otherWidth, otherHeight] = other.dim.split("x").map(Number);
+      return Math.abs(width - otherWidth) <= 1.25 && Math.abs(height - otherHeight) <= 1.25;
+    });
+    if (!twin?.cm) continue;
+    stated.label = refineCoarseInchLabel(stated.label, twin.cm[0], twin.cm[1]);
+  }
 }
 
 function shareTwinKinds(occurrences: Occurrence[]): void {

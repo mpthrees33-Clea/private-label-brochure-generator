@@ -388,6 +388,7 @@ const SPEC_FIELDS: { key: keyof TechSpecs; label: string }[] = [
   { key: "scratchHardness", label: "scratch hardness" },
   { key: "breakingStrength", label: "breaking strength" },
   { key: "dcof", label: "DCOF" },
+  { key: "slipResistance", label: "slip resistance (DIN)" },
 ];
 
 function cellKey(color: string, sizeIndex: number): string {

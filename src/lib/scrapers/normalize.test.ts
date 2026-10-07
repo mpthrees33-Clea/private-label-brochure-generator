@@ -575,4 +575,66 @@ describe("trims and shared mosaics", () => {
     assert.ok(pieces.some((piece) => /3D Hexagons/.test(piece)));
     assert.equal(product.sizes.some((size) => /scalino|base|deco/.test(size.label)), false);
   });
+
+  it("drops finish, edge, and material labels and keeps real colors", () => {
+    const product = finalizeScrapedProduct(
+      emptyProduct({
+        colors: [
+          { name: "Denim", imageUrl: "https://cdn.example/denim.jpg" },
+          { name: "Available finishes", imageUrl: "https://cdn.example/watercolor-Available-Finishes.svg" },
+          { name: "Available edges", imageUrl: "https://cdn.example/watercolor-Available-Edges.svg" },
+          { name: "Glazed Porcelain Stoneware", imageUrl: "https://cdn.example/Aura_Outline_V2.jpg" },
+          { name: "Puro Deep Glaze", imageUrl: "https://cdn.example/puro.jpg" },
+        ],
+        availability: {
+          denim: ['4"x16"'],
+          "available finishes": ['4"x16"'],
+          "glazed porcelain stoneware": ['8"x8"'],
+        },
+      }),
+      { pageTitle: "Watercolor", sourceText: "watercolor denim gray leaf" },
+    );
+    const names = product.colors.map((color) => color.name.toLowerCase());
+    assert.ok(names.includes("denim"));
+    assert.ok(names.some((name) => name.startsWith("puro")));
+    assert.equal(names.some((name) => /finish|edge|stoneware/.test(name)), false);
+    assert.equal(product.availability["available finishes"], undefined);
+    assert.equal(product.availability["glazed porcelain stoneware"], undefined);
+  });
+
+  it("replaces a truncated TCNA footnote with the full printed sentence", () => {
+    const html = `<p><span>*Proper installation methods must be followed per project. Please reference TCNA for more information.</span></p>`;
+    const product = finalizeScrapedProduct(
+      emptyProduct({
+        footnotes: ["*Proper installation methods must be followed per project. Please reference TCNA for"],
+      }),
+      { pageHtml: html, pageTitle: "Atlas", sourceText: "atlas mosaic" },
+    );
+    assert.equal(
+      product.footnotes.some((note) => /please reference tcna for more information/i.test(note)),
+      true,
+    );
+    assert.equal(product.footnotes.some((note) => /tcna for$/i.test(note.trim())), false);
+  });
+
+  it("refines a coarse inch trim from its centimeter twin and reduces 2/8", () => {
+    const html = `<h1>Alchemy</h1>
+      <p>7,2x80 cm 2''x31'' Battiscopa</p>
+      <p>13'' x 47 2/8''</p>
+      <p>7,2x60 cm 2 13/16'' x 23 5/8'' Battiscopa</p>`;
+    const product = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Alchemy",
+        colors: [{ name: "Navy", imageUrl: "https://cdn.example/navy.jpg" }],
+        sizes: [{ label: '24"x48"', iconKind: "rectangle" }],
+      }),
+      { pageHtml: html, pageTitle: "Alchemy", sourceText: "alchemy" },
+    );
+    const pieces = product.specialPieces ?? [];
+    const labels = [...pieces, ...product.sizes.map((size) => size.label)].join(" | ");
+    assert.match(labels, /2 13\/16"x31"/);
+    assert.match(labels, /47 1\/4"/);
+    assert.equal(/47 2\/8/.test(labels), false);
+    assert.match(labels, /2 13\/16"x23 5\/8"/);
+  });
 });

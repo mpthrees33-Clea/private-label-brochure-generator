@@ -20,7 +20,8 @@ const LABEL_RULES: { key: keyof TechSpecs; re: RegExp }[] = [
   { key: "shadeVariation", re: /(?:shade(?:\s*and\s*texture)?|colou?r)\s*(?:variation|rating)|\bvariation\s*:/i },
   { key: "frostResistance", re: /frost\s*(?:resist|proof)|freeze\s*(?:resist|thaw)/i },
   { key: "stainResistance", re: /stain\s*resist/i },
-  { key: "dcof", re: /d\.?\s*c\.?\s*o\.?\s*f|dynamic\s*coefficient|slip\s*resist/i },
+  { key: "slipResistance", re: /slip\s*resist|ramp\s*test|din\s*51130|din\s*51097|en\s*16165/i },
+  { key: "dcof", re: /d\.?\s*c\.?\s*o\.?\s*f|dynamic\s*coefficient/i },
   { key: "thickness", re: /\bthickness\b|\bspessore\b/i },
 ];
 
@@ -114,7 +115,8 @@ export function parseTechSpecsDetailed(html: string): ParsedSpecRecord {
   }
   applyFeatureLines(flat, specs, standards);
   applyClassRun(flat, specs);
-  appendSlipRatings(flat, specs);
+  appendSlipRatings(flat, specs, standards);
+  separateSlip(specs, standards);
   return { specs, standards };
 }
 
@@ -159,7 +161,8 @@ export function parseTechSpecItemsDetailed(items: SpecTextItem[]): ParsedSpecRec
   }
   applyFeatureLines(blob, specs, standards);
   applyClassRun(blob, specs);
-  appendSlipRatings(blob, specs);
+  appendSlipRatings(blob, specs, standards);
+  separateSlip(specs, standards);
   return { specs, standards };
 }
 
@@ -193,9 +196,10 @@ export function groundTechSpecs(
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .toLowerCase();
+  const separated = separateSlip({ ...specs });
   const out: Partial<TechSpecs> = {};
-  for (const key of Object.keys(specs) as (keyof TechSpecs)[]) {
-    const value = specs[key];
+  for (const key of Object.keys(separated) as (keyof TechSpecs)[]) {
+    const value = separated[key];
     if (value == null || String(value).trim() === "") continue;
     if (isAbsent(String(value))) continue;
     if (!valueGrounded(key, String(value), text)) continue;
@@ -455,9 +459,29 @@ function valueFor(key: keyof TechSpecs, text: string, label = ""): string | null
   }
   if (key === "scratchHardness") {
     if (!/mohs|scratch|hardness/i.test(hinted)) return null;
-    const matches = [...hinted.matchAll(/(?<![\d.])(\d{1,2})(?![\d.])(?!\s*%)/g)];
+    const declared = unique(
+      [...hinted.matchAll(/(?:≥|>=)\s*(\d{1,2})\b/g)]
+        .map((match) => Number(match[1]))
+        .filter((n) => n >= 1 && n <= 10)
+        .map((n) => `≥ ${n}`),
+    );
+    if (declared.length) return declared.join(" | ");
+    const body = hinted
+      .replace(/\brange\s*0\s*[-–]\s*10\b/gi, " ")
+      .replace(/\b0\s*[-–]\s*10\b/g, " ")
+      .replace(/\bv\s*[1-4]\b/gi, " ")
+      .replace(/\(\s*\d{1,2}\s*\)/g, " ")
+      .replace(/\b(?:19|20)\d{2}\b/g, " ")
+      .replace(/\biso\s*\d+(?:[.\-/]\d+)?/gi, " ")
+      .replace(/\b10545[.\-/]\d+\b/gi, " ")
+      .replace(/\bastm\s*c\s*-?\s*\d+/gi, " ");
+    const matches = [...body.matchAll(/(?<![\d.])(\d{1,2})(?![\d.])(?!\s*%)/g)];
     const n = matches.map((m) => Number(m[1])).find((value) => value >= 1 && value <= 10);
     return n == null ? null : String(n);
+  }
+  if (key === "slipResistance") {
+    const phrases = rampPhrases(hinted);
+    return phrases.length ? joinRamps(phrases) : null;
   }
   if (key === "dcof") {
     // BCRA ">0.40" is a different method sitting next to DCOF. Don't merge it in.
@@ -535,11 +559,16 @@ function valueGrounded(key: keyof TechSpecs, value: string, text: string): boole
     if (nums.length === 0) return false;
     return nums.every((n) => numberNear(text, n, /break(?:ing)?\s*strength/i));
   }
+  if (key === "slipResistance") {
+    const ratings = [...lower.matchAll(/\br\s*(\d{1,2})\b/g)].map((match) => match[1]);
+    if (ratings.length === 0) return false;
+    return ratings.every((n) => new RegExp(`\\br\\s*${n}\\b`).test(text));
+  }
   if (key === "thickness" || key === "waterAbsorption" || key === "dcof" || key === "scratchHardness") {
     const nums = [...value.matchAll(/\d+(?:\.\d+)?/g)].map((m) => m[0]);
-    if (nums.length === 0) return /r\d{1,2}/.test(lower) && /slip\s*resistance/.test(text);
+    if (nums.length === 0) return false;
     if (key === "thickness") {
-      return nums.every((n) => numberNear(text, n, /thickness/i) || numberPresent(text, n, "mm"));
+      return nums.every((n) => thicknessGrounded(text, n));
     }
     const unit = key === "waterAbsorption" ? "%" : "";
     return nums.every((n) => numberPresent(text, n, unit));
@@ -560,6 +589,14 @@ function numberNear(text: string, n: string, label: RegExp): boolean {
   const ahead = new RegExp(`${label.source}[\\s\\S]{0,80}?${body}`, "i");
   const behind = new RegExp(`${body}[\\s\\S]{0,40}?${label.source}`, "i");
   return ahead.test(text) || behind.test(text);
+}
+
+function thicknessGrounded(text: string, n: string): boolean {
+  const body = numberBody(n);
+  const asMm = new RegExp(`${body}\\s*mm(?!\\s*[23²³](?!\\d))\\b`, "i");
+  if (asMm.test(text)) return true;
+  if (!/^0\.\d{1,3}$/.test(n)) return false;
+  return new RegExp(`(?<!±\\s*)${body}\\s*(?:in(?:ch|ches)?|["”″])\\b`, "i").test(text);
 }
 
 function numberPresent(text: string, n: string, unit: string): boolean {
@@ -590,6 +627,8 @@ function valueAfterLabel(
 }
 
 function labelKey(text: string): keyof TechSpecs | null {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (flat.length > 80) return null;
   for (const rule of LABEL_RULES) {
     if (!rule.re.test(text)) continue;
     if (rule.key === "thickness" && !isProductThicknessLabel(text)) return null;
@@ -677,9 +716,12 @@ function isProductThicknessLabel(text: string): boolean {
 
 function thicknessReadings(text: string): string[] {
   // "S ≥ 1300 N (thickness ≥ 7,5 mm)" is the test condition, not the tile.
-  const body = text.replace(/thickness\s*(?:≥|>=|>|<|≤|<=)\s*\d+(?:[.,]\d+)?\s*mm/gi, " ");
+  // "± 0.040 in" is a tolerance. "40 mm3" is an abrasion volume.
+  const body = text
+    .replace(/thickness\s*(?:≥|>=|>|<|≤|<=)\s*\d+(?:[.,]\d+)?\s*mm/gi, " ")
+    .replace(/±\s*\d+(?:[.,]\d+)?\s*(?:mm|in(?:ch|ches)?)/gi, " ");
   const out: string[] = [];
-  const re = /(?<![\d.,])(\d+(?:[.,]\d+)?)\s*mm\b/gi;
+  const re = /(?<![\d.,])(\d+(?:[.,]\d+)?)\s*mm(?!\s*[23²³](?!\d))/gi;
   let match: RegExpExecArray | null;
   while ((match = re.exec(body))) {
     const before = body.slice(Math.max(0, match.index - 2), match.index);
@@ -712,7 +754,7 @@ function standardsIn(text: string): string[] {
   let split: RegExpExecArray | null;
   while ((split = splitRe.exec(text))) found.push(tidyStandard(`UNI EN ISO 10545-${split[1]}`));
   const re =
-    /(?:UNI\s+EN\s+ISO|ISO)\s*10545[.\-/]\s*\d+|ASTM\s*C-?\s*\d+|ANSI\s*A\s*\d+(?:\.\d+)?|DIN(?:\s+EN)?\s*\d+/gi;
+    /(?:UNI\s+EN\s+ISO|ISO)\s*10545[.\-/]\s*\d+|ASTM\s*C-?\s*\d+|ANSI\s*A\s*\d+(?:\.\d+)?|DIN(?:\s+EN)?\s*\d+|EN\s*16165/gi;
   let match: RegExpExecArray | null;
   while ((match = re.exec(text))) found.push(tidyStandard(match[0]));
   return unique(found);
@@ -761,7 +803,7 @@ export function standardNear(key: keyof TechSpecs, text: string): string | null 
     );
     if (!fitting.length) continue;
     const measured =
-      /[≤≥]|0[.,]\d{2}|\bclass(?:e)?\s+[a-e0-9]\b|\bresistant\b|\bunaffected\b|\bcomplies\b|\bconforme\b|\d+(?:[.,]\d+)?\s*(?:%|mm)\b/i.test(
+      /[≤≥]|0[.,]\d{2}|\bR\s*(?:9|1[0-3])\b|\bclass(?:e)?\s+[a-e0-9]\b|\bresistant\b|\bunaffected\b|\bcomplies\b|\bconforme\b|\d+(?:[.,]\d+)?\s*(?:%|mm)\b/i.test(
         `${before} ${after}`,
       );
     if (!measured) continue;
@@ -793,6 +835,7 @@ function tidyStandard(raw: string): string {
 }
 
 function standardFits(key: keyof TechSpecs, standard: string): boolean {
+  if (/DIN|16165/i.test(standard)) return key === "slipResistance";
   if (/10545|ASTM\s*C|A\s*326|A\s*137/i.test(standard)) {
     return keyForStandard(standard) === key;
   }
@@ -808,6 +851,7 @@ function keyForStandard(standard: string): keyof TechSpecs | null {
   if (/C-?\s*650\b/i.test(standard)) return "chemicalResistance";
   if (/C-?\s*499\b/i.test(standard)) return "thickness";
   if (/A\s*326\.3|A\s*137\.1/i.test(standard)) return "dcof";
+  if (/51130|51097|16165/.test(standard)) return "slipResistance";
   return null;
 }
 
@@ -833,13 +877,14 @@ function applyFeatureLines(
     const part = standard.match(/10545[.\-/]\s*(\d+)/i)?.[1];
     let key: keyof TechSpecs | null = part ? ISO_PART[part] ?? null : null;
     if (/ANSI/i.test(standard) && /dcof|friction|0[.,]\d{2}/i.test(`${standard} ${rawValue}`)) key = "dcof";
-    if (/DIN/i.test(standard) && /\bR\s*\d{1,2}\b/i.test(rawValue)) key = "dcof";
+    if (/DIN/i.test(standard) && /\bR\s*\d{1,2}\b/i.test(rawValue)) key = "slipResistance";
     if (!key) continue;
     const value = featureValue(key, rawValue);
     if (!value) continue;
     if (key === "dcof" && specs.dcof && specs.dcof !== value) {
-      const extras = value.split(" · ").filter((part) => !specs.dcof!.toUpperCase().includes(part.toUpperCase()));
-      if (extras.length) specs.dcof = `${specs.dcof} · ${extras.join(" · ")}`;
+      specs.dcof = mergeRowValues("dcof", [specs.dcof, value]) ?? value;
+    } else if (key === "slipResistance" && specs.slipResistance && specs.slipResistance !== value) {
+      specs.slipResistance = joinRamps(unique([...rampPhrases(specs.slipResistance), ...rampPhrases(value)]));
     } else {
       specs[key] = value;
     }
@@ -852,25 +897,92 @@ function applyFeatureLines(
   }
 }
 
-function appendSlipRatings(flat: string, specs: Partial<TechSpecs>): void {
+function appendSlipRatings(
+  flat: string,
+  specs: Partial<TechSpecs>,
+  standards: Partial<Record<keyof TechSpecs, string>>,
+): void {
   const found: string[] = [];
+  const cited: string[] = [];
   const re = /slip\s*resistance|en\s*16165|din\s*(?:en\s*)?(?:51130|51097)/gi;
   let match: RegExpExecArray | null;
   while ((match = re.exec(flat))) {
-    const window = flat.slice(Math.max(0, match.index - 40), match.index + 90);
-    for (const rating of window.matchAll(/\bR\s*(\d{1,2})\b/g)) {
-      const n = Number(rating[1]);
-      if (n < 9 || n > 13) continue;
-      found.push(`R${n}`);
+    const window = flat.slice(Math.max(0, match.index - 40), match.index + 120);
+    found.push(...rampPhrases(window));
+    for (const standard of standardsIn(window)) {
+      if (/DIN|16165/i.test(standard)) cited.push(standard);
     }
   }
-  for (const rating of unique(found)) {
-    if (specs.dcof && !specs.dcof.toUpperCase().includes(rating)) {
-      specs.dcof = `${specs.dcof} · ${rating}`;
-    } else if (!specs.dcof) {
-      specs.dcof = rating;
+  if (found.length) {
+    const already = specs.slipResistance ? rampPhrases(specs.slipResistance) : [];
+    specs.slipResistance = joinRamps(unique([...already, ...found]));
+  }
+  if (cited.length && !standards.slipResistance) standards.slipResistance = unique(cited)[0];
+}
+
+function rampPhrases(value: string): string[] {
+  const out: string[] = [];
+  const re = /\b(matte|grip|natural|structured|polished|textured)?\s*(?:≥\s*)?R\s*(\d{1,2})(?:\s*([A-C]))?\b/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(value))) {
+    const n = Number(match[2]);
+    if (n < 9 || n > 13) continue;
+    const finish = match[1] ? `${match[1].toLowerCase()} ` : "";
+    const letter = match[3] ? ` ${match[3].toUpperCase()}` : "";
+    out.push(`${finish}R${n}${letter}`);
+  }
+  return out;
+}
+
+function joinRamps(phrases: string[]): string {
+  const list = unique(phrases);
+  if (list.length === 0) return "";
+  if (list.some((phrase) => phrase.includes(" "))) return list.join(" | ");
+  return list.join(" · ");
+}
+
+function dcofWithoutRamps(value: string): string | null {
+  const stripped = value
+    .replace(/\b(?:matte|grip|natural|structured|polished|textured)\s+(?:≥\s*)?R\s*\d{1,2}(?:\s*[A-C])?\b/gi, " ")
+    .replace(/\bR\s*\d{1,2}(?:\s*[A-C])?\b/gi, " ");
+  const parts = stripped
+    .split(/\s*(?:\||·)\s*/)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter((part) => /0[.,]\d{2}/.test(part))
+    .map((part) => part.replace(/(\d),(\d)/, "$1.$2"));
+  const kept = unique(parts);
+  return kept.length ? kept.join(" | ") : null;
+}
+
+/** R9–R13 are DIN ramp ratings. Wet DCOF stays a coefficient. */
+function separateSlip(
+  specs: Partial<TechSpecs>,
+  standards?: Partial<Record<keyof TechSpecs, string>>,
+): Partial<TechSpecs> {
+  const ramps = [
+    ...(specs.slipResistance ? rampPhrases(specs.slipResistance) : []),
+    ...(specs.dcof ? rampPhrases(specs.dcof) : []),
+  ];
+  if (specs.dcof) {
+    const numeric = dcofWithoutRamps(specs.dcof);
+    if (numeric) specs.dcof = numeric;
+    else delete specs.dcof;
+  }
+  const slip = joinRamps(unique(ramps));
+  if (slip) specs.slipResistance = slip;
+  else delete specs.slipResistance;
+  if (standards?.dcof && specs.slipResistance) {
+    const parts = standards.dcof.split(/\s*\/\s*/);
+    const din = parts.filter((part) => /DIN|16165/i.test(part));
+    const rest = parts.filter((part) => !/DIN|16165/i.test(part));
+    if (din.length) {
+      const prev = standards.slipResistance;
+      standards.slipResistance = unique([prev, ...din].filter((part): part is string => !!part)).join(" / ");
+      if (rest.length) standards.dcof = rest.join(" / ");
+      else delete standards.dcof;
     }
   }
+  return specs;
 }
 
 function featureValue(key: keyof TechSpecs, raw: string): string | null {
@@ -888,9 +1000,11 @@ function featureValue(key: keyof TechSpecs, raw: string): string | null {
       const op = item[1] ? "≥ " : "";
       return `${op}${item[2].replace(",", ".")}`;
     });
-    const ratings = unique([...raw.matchAll(/\bR\s*(\d{1,2})\b/gi)].map((item) => `R${item[1]}`));
-    const parts = [...nums, ...ratings];
-    return parts.length ? parts.join(" · ") : null;
+    return nums.length ? unique(nums).join(" | ") : null;
+  }
+  if (key === "slipResistance") {
+    const phrases = rampPhrases(raw);
+    return phrases.length ? joinRamps(phrases) : null;
   }
   if (key === "waterAbsorption") return percentValue(raw);
   if (key === "breakingStrength") return valueFor("breakingStrength", raw, "breaking strength");

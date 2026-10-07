@@ -259,13 +259,64 @@ function printedInchPair(
   return null;
 }
 
+function gcd(a: number, b: number): number {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y) {
+    const next = x % y;
+    x = y;
+    y = next;
+  }
+  return x || 1;
+}
+
+function reducedFraction(numerator: number, denominator: number): string {
+  const divisor = gcd(numerator, denominator);
+  return `${numerator / divisor}/${denominator / divisor}`;
+}
+
+/** 7.2 cm is 2 13/16", not the coarse 2" printed beside it. A side already
+ *  within 5/8" of the metric measurement stays as printed (31" next to 80 cm). */
+export function refineCoarseInchLabel(label: string, cmWidth: number, cmHeight: number): string {
+  const match = label.match(
+    /^(\d+(?:\s+\d+\/\d+)?(?:\.\d+)?)"x(\d+(?:\s+\d+\/\d+)?(?:\.\d+)?)"(.*)$/i,
+  );
+  if (!match) return label;
+  const left = refineInchSide(match[1], cmWidth);
+  const right = refineInchSide(match[2], cmHeight);
+  return `${left}"x${right}"${match[3]}`;
+}
+
+function refineInchSide(printed: string, cm: number): string {
+  const side = parseInchSide(printed);
+  if (!side || !Number.isFinite(cm) || cm <= 0) return printed;
+  const exact = cm / 2.54;
+  if (Math.abs(side.n - exact) <= 0.625) return side.label;
+  return mixedSixteenth(exact);
+}
+
+function mixedSixteenth(inches: number): string {
+  const sixteenths = Math.round(inches * 16);
+  const whole = Math.floor(sixteenths / 16);
+  let numerator = sixteenths - whole * 16;
+  const divisor = gcd(numerator, 16);
+  numerator /= divisor;
+  const denominator = 16 / divisor;
+  if (numerator === 0) return String(whole);
+  if (whole === 0) return `${numerator}/${denominator}`;
+  return `${whole} ${numerator}/${denominator}`;
+}
+
 function parseInchSide(token: string): InchSide | null {
   const t = token.trim();
   const spaced = /^(\d+)\s+(\d+)\s*\/\s*(\d+)$/.exec(t);
   if (spaced) {
+    const whole = Number(spaced[1]);
+    const numerator = Number(spaced[2]);
+    const denominator = Number(spaced[3]);
     return {
-      n: Number(spaced[1]) + Number(spaced[2]) / Number(spaced[3]),
-      label: `${Number(spaced[1])} ${Number(spaced[2])}/${Number(spaced[3])}`,
+      n: whole + numerator / denominator,
+      label: `${whole} ${reducedFraction(numerator, denominator)}`,
     };
   }
   const frac = /^(\d+)\/(\d+)$/.exec(t);
@@ -276,16 +327,16 @@ function parseInchSide(token: string): InchSide | null {
       const whole = digits.slice(0, digits.length - numLen);
       const num = digits.slice(digits.length - numLen);
       if (whole.length < 1 || whole.length > 2) continue;
-      return {
-        n: Number(whole) + Number(num) / Number(frac[2]),
-        label: `${Number(whole)} ${Number(num)}/${Number(frac[2])}`,
-      };
-    }
     return {
-      n: Number(frac[1]) / Number(frac[2]),
-      label: `${Number(frac[1])}/${Number(frac[2])}`,
+      n: Number(whole) + Number(num) / Number(frac[2]),
+      label: `${Number(whole)} ${reducedFraction(Number(num), Number(frac[2]))}`,
     };
   }
+  return {
+    n: Number(frac[1]) / Number(frac[2]),
+    label: reducedFraction(Number(frac[1]), Number(frac[2])),
+  };
+}
   if (/^\d+(?:\.\d+)?$/.test(t)) {
     const n = Number(t);
     return { n, label: formatIn(n) };

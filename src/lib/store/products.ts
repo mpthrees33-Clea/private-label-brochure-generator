@@ -105,6 +105,7 @@ export async function createProduct(
     trinityName: chooseTrinityName(
       input.trinityName,
       all.map((row) => row.trinityName),
+      { separate: true },
     ),
     id: randomId(),
     createdAt: now,

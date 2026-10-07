@@ -219,8 +219,25 @@ export function colorNameFromAlt(alt: string, shapeName = ""): string | null {
     " ",
   );
   s = s.replace(/\s+/g, " ").trim();
-  if (!s || s.length < 2) return null;
+  if (!s || s.length < 2 || isNonColorName(s)) return null;
   return s;
+}
+
+/** Section headings, body/material labels, and packing captions are not colors. */
+export function isNonColorName(name: string): boolean {
+  const s = name.replace(/\s+/g, " ").trim();
+  if (!s) return true;
+  if (/^available\s+(?:finishes?|edges?|sizes?|colou?rs?|formats?)\b/i.test(s)) return true;
+  if (/^(?:finishes?|edges?|sizes?|formats?|specifications?|technical details)$/i.test(s)) return true;
+  if (
+    /^(?:glazed\s+|unglazed\s+|full[\s-]?body\s+|through[\s-]?body\s+)*(?:porcelain|ceramic|stoneware)(?:\s+(?:porcelain|ceramic|stoneware|tile))*$/i.test(
+      s,
+    )
+  ) {
+    return true;
+  }
+  if (/\b(?:packing|packaging)\s+(?:table|chart|list)\b/i.test(s)) return true;
+  return false;
 }
 
 function trimTableGroups($: cheerio.CheerioAPI, pageUrl: string): CatalogGroup[] {

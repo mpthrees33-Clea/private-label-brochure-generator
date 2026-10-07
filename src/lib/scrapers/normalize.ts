@@ -7,7 +7,7 @@ import {
   standardNear,
 } from "./spec-parse";
 import { splitSpecialPieces } from "./special-pieces";
-import { extractSwatchCards } from "./catalog";
+import { extractSwatchCards, isNonColorName } from "./catalog";
 import {
   canonicalFinish,
   dropNominalTwins,
@@ -81,6 +81,8 @@ export function finalizeScrapedProduct(
   applyThicknessNotes(next, sourceText);
   clearUnratedDcof(next, sourceText);
   applyWallFootnote(next, sourceText);
+  if (pageHtml) applyPrintedFootnotes(next, pageHtml);
+  dropNonColorLabels(next);
   next.heroImageUrl = cleanImageUrl(next.heroImageUrl);
   if (catalog?.heroImageUrl && (!next.heroImageUrl || isJunkImage(next.heroImageUrl) || looksLikeSwatch(next.heroImageUrl))) {
     next.heroImageUrl = catalog.heroImageUrl;
@@ -560,10 +562,52 @@ function attachSwatchCards(product: ScrapedProduct, html: string): void {
 }
 
 function isColorCaption(name: string): boolean {
+  if (isNonColorName(name)) return false;
   if (parseSizeLabel(name)) return false;
   if (/^(glossy|matte|polished|natural|soft|finish|sizes?)$/i.test(name.trim())) return false;
   if (/^\d/.test(name.trim())) return false;
   return name.trim().split(/\s+/).length <= 4;
+}
+
+function dropNonColorLabels(product: ScrapedProduct): void {
+  const dropped = new Set<string>();
+  product.colors = product.colors.filter((color) => {
+    if (!isNonColorName(color.name)) return true;
+    dropped.add(color.name.toLowerCase());
+    return false;
+  });
+  for (const key of Object.keys(product.availability)) {
+    if (dropped.has(key.toLowerCase()) || isNonColorName(key)) delete product.availability[key];
+  }
+  if (!product.availabilityFinishes) return;
+  for (const key of Object.keys(product.availabilityFinishes)) {
+    if (dropped.has(key.toLowerCase()) || isNonColorName(key)) delete product.availabilityFinishes[key];
+  }
+}
+
+function applyPrintedFootnotes(product: ScrapedProduct, html: string): void {
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ");
+  const printed: string[] = [];
+  const re = /\*\s*([A-Za-z][\s\S]{10,180}?TCNA\b[\s\S]{0,60}?\.)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text))) {
+    const sentence = `*${match[1].replace(/\s+/g, " ").trim()}`;
+    if (!printed.some((note) => note.toLowerCase() === sentence.toLowerCase())) printed.push(sentence);
+  }
+  if (printed.length === 0) return;
+  const kept = product.footnotes.filter((note) => !printed.some((full) => notesOverlap(note, full)));
+  product.footnotes = [...printed, ...kept];
+}
+
+function notesOverlap(shorter: string, longer: string): boolean {
+  const a = shorter.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const b = longer.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (!a || !b) return false;
+  return a === b || b.startsWith(a) || a.startsWith(b);
 }
 
 function namesMatch(colorName: string, caption: string): boolean {

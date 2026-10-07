@@ -139,20 +139,22 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
           </p>
         )}
         {(data.finishLegend.length > 0 || data.footnotes.length > 0) && (
-          <div className="mt-1.5 flex justify-between text-[10px] lowercase text-brochure-gray">
-            <div>
-              {data.footnotes.map((f) => (
-                <p key={f}>{f}</p>
-              ))}
-            </div>
-            <div className="flex items-center gap-3">
-              {data.finishLegend.map((l) => (
-                <span key={l} className="flex items-center gap-1">
-                  <FinishMarker finish={l} variant="legend" />
-                  {l}
-                </span>
-              ))}
-            </div>
+          <div className="mt-1.5 text-[10px] lowercase leading-tight text-brochure-gray">
+            {data.footnotes.map((f) => (
+              <p key={f} className="max-w-full break-words">
+                {f}
+              </p>
+            ))}
+            {data.finishLegend.length > 0 && (
+              <div className="mt-0.5 flex items-center justify-end gap-3">
+                {data.finishLegend.map((l) => (
+                  <span key={l} className="flex items-center gap-1">
+                    <FinishMarker finish={l} variant="legend" />
+                    {l}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </Block>

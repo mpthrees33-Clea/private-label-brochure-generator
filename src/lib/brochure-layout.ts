@@ -18,7 +18,7 @@ const BODY_TOP_GAP = 12;           // gap below the header before swatches
 const SECTION_GAP = 8;             // gap between swatch block and size chart
 const MATRIX_HEADER_H = 68;        // sizes h3 (~18) + icon row (~50)
 const MATRIX_ROW_H = 22;           // py-1 (8) + text 10 + border-b 1 + cushion
-const FOOTNOTES_MAX_H = 36;
+const FOOTNOTES_MAX_H = 52;
 const SAFETY_BUFFER = 20;
 
 const SWATCH_LABEL_H = 22;     // mt-1 (4) + one 11px line
