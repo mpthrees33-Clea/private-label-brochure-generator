@@ -114,7 +114,7 @@ export function EditChat({
           rows={3}
           placeholder="e.g. make the description shorter and reorder colors light-to-dark"
           disabled={busy}
-          className="w-full rounded-md border border-divider bg-surface-1 px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none disabled:opacity-60"
+          className="w-full rounded-md border border-divider bg-surface-1 px-3 py-2 text-sm text-fg focus:border-accent focus:outline-hidden disabled:opacity-60"
         />
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] text-fg-faint">

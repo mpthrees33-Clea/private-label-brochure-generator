@@ -108,7 +108,7 @@ export default function ScrapeFormPage() {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://www.ragnousa.com/collections/forum-series/"
-              className="mt-1 w-full rounded-md border border-divider bg-surface-1 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+              className="mt-1 w-full rounded-md border border-divider bg-surface-1 px-3 py-2 text-sm focus:border-accent focus:outline-hidden"
             />
           </label>
         ) : (

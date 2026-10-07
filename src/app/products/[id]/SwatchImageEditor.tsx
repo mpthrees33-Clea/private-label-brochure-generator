@@ -468,7 +468,7 @@ function SwatchRow({
   return (
     <div className="mt-1.5">
       <div className="flex items-center gap-2">
-        <div className="h-10 w-5 shrink-0 overflow-hidden rounded-sm border border-divider bg-[#f3f3f3]">
+        <div className="h-10 w-5 shrink-0 overflow-hidden rounded-xs border border-divider bg-[#f3f3f3]">
           {hasCurrent ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -488,7 +488,7 @@ function SwatchRow({
           onKeyDown={(e) => {
             if (e.key === "Enter") onSave();
           }}
-          className={`min-w-0 flex-1 rounded-md border bg-surface px-2 py-1 text-[11px] text-fg focus:border-accent focus:outline-none ${
+          className={`min-w-0 flex-1 rounded-md border bg-surface px-2 py-1 text-[11px] text-fg focus:border-accent focus:outline-hidden ${
             hasCurrent && !isDirty ? "border-divider text-fg-muted" : "border-divider"
           }`}
           title={value}

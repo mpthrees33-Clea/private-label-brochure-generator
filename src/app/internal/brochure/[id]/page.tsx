@@ -13,9 +13,10 @@ export const maxDuration = 30;
 export default async function SavedBrochurePage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const product = await getProduct(params.id);
+  const { id } = await params;
+  const product = await getProduct(id);
   if (!product) notFound();
 
   // Match the editor view: factory-learned defaults compose UNDER the
@@ -25,7 +26,7 @@ export default async function SavedBrochurePage({
 
   return (
     <>
-      <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-bg/80 px-6 py-3 backdrop-blur print:hidden">
+      <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-bg/80 px-6 py-3 backdrop-blur-sm print:hidden">
         <Link
           href={`/products/${product.id}`}
           className="text-sm text-fg-muted hover:text-accent"

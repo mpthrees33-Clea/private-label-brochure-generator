@@ -10,9 +10,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const product = await getProduct(params.id);
+  const { id } = await params;
+  const product = await getProduct(id);
   if (!product) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -21,8 +22,9 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const body = await req.json();
   const { mergeTechSpecs, mergeLayoutOverrides, ...patch } = body ?? {};
   try {
@@ -30,7 +32,7 @@ export async function PATCH(
     // fold incoming values into the existing object instead of
     // replacing wholesale.
     if (mergeTechSpecs && patch.techSpecs && typeof patch.techSpecs === "object") {
-      const existing = await getProduct(params.id);
+      const existing = await getProduct(id);
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
       }
@@ -51,7 +53,7 @@ export async function PATCH(
       patch.layoutOverrides &&
       typeof patch.layoutOverrides === "object"
     ) {
-      const existing = await getProduct(params.id);
+      const existing = await getProduct(id);
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
       }
@@ -65,7 +67,7 @@ export async function PATCH(
       }
       patch.layoutOverrides = merged;
     }
-    const product = await updateProduct(params.id, patch);
+    const product = await updateProduct(id, patch);
     return NextResponse.json({ product });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -76,8 +78,9 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  await deleteProduct(params.id);
+  const { id } = await params;
+  await deleteProduct(id);
   return NextResponse.json({ ok: true });
 }

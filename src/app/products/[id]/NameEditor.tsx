@@ -125,7 +125,7 @@ export function NameEditor({
           }}
           disabled={saving}
           placeholder="e.g. kendall"
-          className="mt-1 w-full rounded-md border border-divider bg-surface-1 px-3 py-1.5 text-2xl lowercase text-fg focus:border-accent focus:outline-none"
+          className="mt-1 w-full rounded-md border border-divider bg-surface-1 px-3 py-1.5 text-2xl lowercase text-fg focus:border-accent focus:outline-hidden"
         />
       </label>
       <label className="mt-2 block">
@@ -141,7 +141,7 @@ export function NameEditor({
           }}
           disabled={saving}
           placeholder="e.g. thru color porcelain tile, made in usa"
-          className="mt-1 w-full rounded-md border border-divider bg-surface-1 px-3 py-1.5 text-sm lowercase text-fg focus:border-accent focus:outline-none"
+          className="mt-1 w-full rounded-md border border-divider bg-surface-1 px-3 py-1.5 text-sm lowercase text-fg focus:border-accent focus:outline-hidden"
         />
       </label>
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}

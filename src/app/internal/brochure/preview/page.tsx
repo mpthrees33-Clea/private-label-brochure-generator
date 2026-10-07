@@ -11,7 +11,7 @@ export default function PreviewPage() {
   return (
     <>
       {/* Download bar — hidden when Puppeteer prints the page. */}
-      <div className="sticky top-0 z-50 flex justify-end gap-3 bg-bg/80 px-6 py-3 backdrop-blur print:hidden">
+      <div className="sticky top-0 z-50 flex justify-end gap-3 bg-bg/80 px-6 py-3 backdrop-blur-sm print:hidden">
         <a
           href="/api/brochure/pdf?source=preview"
           download="preview.pdf"

@@ -149,7 +149,7 @@ export function HeroImageEditor({
             Big lifestyle / room-scene image at the top of page 1. Paste a URL, paste an image, or tap the <Camera className="inline h-3 w-3 align-[-1px]" /> icon to upload from your photos. The on-page brochure preview lets you nudge its vertical position by clicking and dragging.
           </p>
           <div className="flex items-center gap-2">
-            <div className="h-12 w-16 shrink-0 overflow-hidden rounded-sm border border-divider bg-[#f3f3f3]">
+            <div className="h-12 w-16 shrink-0 overflow-hidden rounded-xs border border-divider bg-[#f3f3f3]">
               {!missing ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -169,7 +169,7 @@ export function HeroImageEditor({
               onKeyDown={(e) => {
                 if (e.key === "Enter") save();
               }}
-              className="min-w-0 flex-1 rounded-md border border-divider bg-surface px-2 py-1 text-[11px] text-fg focus:border-accent focus:outline-none"
+              className="min-w-0 flex-1 rounded-md border border-divider bg-surface px-2 py-1 text-[11px] text-fg focus:border-accent focus:outline-hidden"
             />
             <input
               ref={fileInputRef}

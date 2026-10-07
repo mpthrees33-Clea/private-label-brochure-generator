@@ -14,9 +14,10 @@ export const dynamic = "force-dynamic";
 // reading arbitrary files from the uploads dir.
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { filename: string } },
+  { params }: { params: Promise<{ filename: string }> },
 ) {
-  const result = await readUpload(params.filename);
+  const { filename } = await params;
+  const result = await readUpload(filename);
   if (!result) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }

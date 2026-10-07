@@ -128,7 +128,7 @@ export function MissingFieldsPanel({
               value={specUrl}
               onChange={(e) => setSpecUrl(e.target.value)}
               placeholder="https://factory.com/.../spec-sheet.pdf"
-              className="flex-1 rounded-md border border-divider bg-surface-1 px-3 py-1.5 text-sm text-fg focus:border-accent focus:outline-none"
+              className="flex-1 rounded-md border border-divider bg-surface-1 px-3 py-1.5 text-sm text-fg focus:border-accent focus:outline-hidden"
               disabled={busy}
             />
             <button

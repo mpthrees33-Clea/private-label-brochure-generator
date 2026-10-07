@@ -9,7 +9,10 @@ import { PDFDocument } from "pdf-lib";
 // GitHub if cold starts are slow. Leave PUPPETEER_EXECUTABLE_PATH unset
 // on Vercel so this path is used. On the VPS, set
 // PUPPETEER_EXECUTABLE_PATH to system Chrome instead.
-const CHROMIUM_VERSION = "v148.0.0";
+// puppeteer-core 25.12 drives Chrome 154. The newest Sparticuz pack
+// published for Lambda is 153, which is the closest build that still
+// matches this package's headless-shell launch path.
+const CHROMIUM_VERSION = "v153.0.0";
 const DEFAULT_PACK_URL =
   process.arch === "arm64"
     ? `https://github.com/Sparticuz/chromium/releases/download/${CHROMIUM_VERSION}/chromium-${CHROMIUM_VERSION}-pack.arm64.tar`
@@ -57,7 +60,7 @@ async function launchBrowserWithRetry(maxRetries = 4): Promise<Browser> {
   const headless = local ? true : "shell";
   const args = local
     ? SYSTEM_CHROMIUM_ARGS
-    : puppeteer.defaultArgs({ args: chromium.args, headless: "shell" });
+    : await puppeteer.defaultArgs({ args: chromium.args, headless: "shell" });
 
   let lastErr: unknown;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
