@@ -3,6 +3,7 @@ import { scrapeFromPdfWithAI, scrapeWithAI } from "./ai";
 import { extractCatalog } from "./catalog";
 import { supplementFromLinkedPages } from "./linked-pages";
 import { enrichTechSpecs, nonNullSpecCount } from "./tech-specs";
+import { upgradeFullFaceImages } from "./full-face";
 import { improveProductImages } from "./images";
 import type { ScrapedProduct } from "./types";
 
@@ -70,6 +71,9 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
   });
   await improveProductImages(product, catalog).catch((err) => {
     console.error("improveProductImages failed:", err);
+  });
+  await upgradeFullFaceImages(product, { pageUrl: url, html }).catch((err) => {
+    console.error("upgradeFullFaceImages failed:", err);
   });
 
   // Deep tech-spec pass: factories usually only print 1-2 specs on the

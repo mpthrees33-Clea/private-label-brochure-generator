@@ -11,6 +11,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { BrochureColor } from "@/lib/brochure-types";
+import { facePhotoMismatch } from "@/lib/swatch-geometry";
 import { proxyImageUrl } from "@/lib/image-proxy";
 import {
   detectSwatchPattern,
@@ -283,6 +284,11 @@ export function SwatchImageEditor({
                   ) && (
                       <span className="text-[11px] font-medium text-amber-700">size unknown</span>
                     )}
+                  {(c.faces ?? []).some((face) => facePhotoMismatch(face)) && (
+                    <span className="text-[11px] font-medium text-amber-700">
+                      photo shape doesn&apos;t match tile size
+                    </span>
+                  )}
                 </div>
                 <SwatchRow
                   label="main swatch"

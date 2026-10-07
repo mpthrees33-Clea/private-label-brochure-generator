@@ -97,6 +97,24 @@ describe("page 2 swatch stack", () => {
     assert.ok(mixed.width >= 72, `mixed width ${mixed.width}`);
   });
 
+  it("draws a 3x16 at least as wide as the 8x8 and not as a sliver", () => {
+    const ratios = Array.from({ length: 6 }, () => [1, 16 / 3, 16 / 3]);
+    const inches = Array.from({ length: 6 }, () => [
+      { widthIn: 8, heightIn: 8 },
+      { widthIn: 3, heightIn: 16 },
+      { widthIn: 3, heightIn: 16 },
+    ]);
+    const layout = computeSwatchLayout(6, false, ["au 10 puro deep glaze"], ratios, inches);
+    const square = layout.faceBoxes[0];
+    const plank = layout.faceBoxes[1];
+    assert.ok(plank.width >= square.width, `plank ${plank.width} square ${square.width}`);
+    assert.ok(plank.height >= 28, `plank height ${plank.height}`);
+    assert.ok(square.width >= 64, `square ${square.width}`);
+    const matrixH = 68 + 6 * 22 + 16;
+    const gap = SPECS_TOP - (sizeMatrixTop(layout) + matrixH);
+    assert.ok(gap >= 8, `mixed inch void was ${gap}px`);
+  });
+
   it("fits nine upright 4x16 tiles without dropping under the minimum slot", () => {
     const layout = computeSwatchLayout(9, false, [], ratiosFor(9, [0.25]));
     assert.equal(layout.height, layout.width * 4);

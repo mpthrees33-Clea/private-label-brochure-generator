@@ -1,5 +1,5 @@
 import type { BlockId, BrochureData } from "./brochure-types";
-import { resolveSwatchFaces } from "./swatch-geometry";
+import { nominalUnits, resolveSwatchFaces } from "./swatch-geometry";
 
 // Letter at 96 DPI: 816 × 1056 px.
 export const PAGE_W = 816;
@@ -33,16 +33,23 @@ const PAGE2_TOP = HEADER_H + BODY_TOP_GAP;
 // slightly smaller swatches when that band would exceed this.
 const MAX_VOID_ABOVE_SPECS = 96;
 const MIN_SWATCH_W = 64;
+// A 3×16 drawn at the square's width is a sliver. Prefer a row
+// arrangement whose shortest side stays at least this tall.
+const MIN_SHORT_PX = 28;
 
 function estimateSizeMatrixHeight(colorCount: number): number {
   return MATRIX_HEADER_H + colorCount * MATRIX_ROW_H;
 }
 
 export interface SwatchLayout {
-  /** Shared column width for one color. Each face height is width / ratio. */
+  /** Widest color column. A 12×24 tile's width; a mixed color's plank width. */
   width: number;
-  /** Height of the first face. Kept so a 12×24 tile is still twice as tall as it is wide. */
+  /** Height of the first face of the first color. A 12×24 tile is twice as tall as it is wide. */
   height: number;
+  /** Pixels per inch when sizes are known, otherwise pixels per ratio-unit. */
+  scale: number;
+  /** Square side, in the same units as `scale`, for a face with no nominal size. */
+  unitFallback: number;
   /** Number of color-group rows. Faces stack inside each color. */
   primaryRows: number;
   /** Colors per primary row (last row may have fewer). */
@@ -52,15 +59,24 @@ export interface SwatchLayout {
   labelHeight: number;
   /** width/height of each face in a color, top to bottom. */
   faceRatios: number[];
+  /** Pixel boxes of the tallest color, matching the vertical budget. */
+  faceBoxes: { width: number; height: number }[];
 }
 
 export function swatchBlockHeight(layout: SwatchLayout): number {
   if (layout.width <= 0 || layout.perRow <= 0) return 0;
-  const ratios = layout.faceRatios.length > 0 ? layout.faceRatios : [1];
   const labelH = layout.labelHeight || SWATCH_LABEL_H;
-  const imageStack = ratios.reduce((sum, ratio) => sum + layout.width / Math.max(ratio, 0.08), 0);
-  const innerGaps = Math.max(0, ratios.length - 1) * SWATCH_ROW_GAP;
-  const groupH = imageStack + ratios.length * labelH + innerGaps;
+  const boxes = layout.faceBoxes ?? [];
+  const imageStack =
+    boxes.length > 0
+      ? boxes.reduce((sum, box) => sum + box.height, 0)
+      : (layout.faceRatios.length > 0 ? layout.faceRatios : [1]).reduce(
+          (sum, ratio) => sum + layout.width / Math.max(ratio, 0.08),
+          0,
+        );
+  const faceCount = boxes.length > 0 ? boxes.length : Math.max(1, layout.faceRatios.length);
+  const innerGaps = Math.max(0, faceCount - 1) * SWATCH_ROW_GAP;
+  const groupH = imageStack + faceCount * labelH + innerGaps;
   return (
     layout.primaryRows * groupH +
     Math.max(0, layout.primaryRows - 1) * SWATCH_ROW_GAP
@@ -85,11 +101,17 @@ export function swatchLabelLines(name: string, width: number): number {
   return Math.min(2, Math.max(1, Math.ceil(name.trim().length / perLine)));
 }
 
+export interface NominalInches {
+  widthIn: number;
+  heightIn: number;
+}
+
 export function computeSwatchLayout(
   colorCount: number,
   hasDeco: boolean,
   names: string[] = [],
   faceRatios?: number[][],
+  faceInches?: (NominalInches | null)[][],
 ): SwatchLayout {
   const ratiosFor = (index: number): number[] => {
     const custom = faceRatios?.[index];
@@ -97,20 +119,53 @@ export function computeSwatchLayout(
     // No nominal size was passed. Do not invent the old 12×24 frame.
     return [1];
   };
-  const stackFactor = (ratios: number[]) =>
-    ratios.reduce((sum, ratio) => sum + 1 / Math.max(ratio, 0.08), 0);
+  const unitsFor = (index: number) => {
+    const ratios = ratiosFor(index);
+    return ratios.map((ratio, faceIndex) => {
+      const inches = faceInches?.[index]?.[faceIndex];
+      if (inches && inches.widthIn > 0 && inches.heightIn > 0) {
+        return nominalUnits(ratio, inches.widthIn, inches.heightIn);
+      }
+      return nominalUnits(ratio);
+    });
+  };
 
-  if (colorCount <= 0) {
-    return {
-      width: 0,
-      height: 0,
-      primaryRows: 1,
-      perRow: 0,
-      hasDeco,
-      labelHeight: SWATCH_LABEL_H,
-      faceRatios: ratiosFor(0),
-    };
+  const anyInches = (faceInches ?? []).some((row) =>
+    (row ?? []).some((box) => box && box.widthIn > 0 && box.heightIn > 0),
+  );
+  const unitFallback = anyInches ? 4 : 0;
+
+  const empty = (ratios: number[]): SwatchLayout => ({
+    width: 0,
+    height: 0,
+    scale: 0,
+    unitFallback,
+    primaryRows: 1,
+    perRow: 0,
+    hasDeco,
+    labelHeight: SWATCH_LABEL_H,
+    faceRatios: ratios,
+    faceBoxes: [],
+  });
+
+  if (colorCount <= 0) return empty(ratiosFor(0));
+
+  const colors = Array.from({ length: colorCount }, (_, index) => unitsFor(index));
+  let tallestIndex = 0;
+  let tallestStack = -1;
+  let widestUnits = 0;
+  for (let i = 0; i < colors.length; i++) {
+    const stack = colors[i].reduce((sum, unit) => sum + unit.h, 0);
+    const column = Math.max(...colors[i].map((unit) => unit.w), 0);
+    if (stack > tallestStack) {
+      tallestStack = stack;
+      tallestIndex = i;
+    }
+    if (column > widestUnits) widestUnits = column;
   }
+  const tallest = colors[tallestIndex];
+  const tallestRatios = ratiosFor(tallestIndex);
+  const first = colors[0][0] ?? { w: 1, h: 1 };
 
   const sectionGaps = 2; // swatches→matrix, matrix→footnotes
   const sizeMatrixH = estimateSizeMatrixHeight(colorCount);
@@ -126,18 +181,8 @@ export function computeSwatchLayout(
   const specsTop = PAGE_H - BOTTOM_BLOCK_H;
 
   const pick = (labelHeight: number): SwatchLayout => {
-    const candidates: SwatchLayout[] = [];
+    const candidates: Array<SwatchLayout & { minShort: number }> = [];
     const seenRows = new Set<number>();
-    let factor = 0;
-    let tallest = ratiosFor(0);
-    for (let i = 0; i < colorCount; i++) {
-      const ratios = ratiosFor(i);
-      const next = stackFactor(ratios);
-      if (next > factor) {
-        factor = next;
-        tallest = ratios;
-      }
-    }
     const faceCount = tallest.length;
     for (let requested = 1; requested <= MAX_PRIMARY_ROWS; requested++) {
       const perRow = Math.ceil(colorCount / requested);
@@ -149,33 +194,61 @@ export function computeSwatchLayout(
       const groupChrome = faceCount * labelHeight + innerGaps;
       const rowGaps = Math.max(0, primaryRows - 1) * SWATCH_ROW_GAP;
       const availImagesV = Math.max(0, availV - primaryRows * groupChrome - rowGaps);
-      const widthFromH = Math.floor(availImagesV / (primaryRows * factor));
-      const maxImageW = Math.floor(
+      const maxColumnPx = Math.floor(
         (CONTENT_W - SWATCH_GAP_X * Math.max(0, perRow - 1)) / perRow,
       );
-      const w = Math.max(0, Math.min(maxImageW, widthFromH));
-      const firstRatio = ratiosFor(0)[0] || 1;
+      const scaleFromW = widestUnits > 0 ? maxColumnPx / widestUnits : 0;
+      const scaleFromH = tallestStack > 0 ? availImagesV / (primaryRows * tallestStack) : 0;
+      const rawScale = Math.max(0, Math.min(scaleFromW, scaleFromH));
+      const columnPx = Math.floor(rawScale * widestUnits);
+      const scale = widestUnits > 0 ? columnPx / widestUnits : 0;
+      const faceBoxes = tallest.map((unit) => ({
+        width: Math.max(1, Math.round(scale * unit.w)),
+        height: Math.max(1, Math.round(scale * unit.h)),
+      }));
+      const shortSides = colors.flatMap((units) =>
+        units.map((unit) => Math.min(Math.round(scale * unit.w), Math.round(scale * unit.h))),
+      );
+      const minShort = shortSides.length > 0 ? Math.min(...shortSides) : 0;
       candidates.push({
-        width: w,
-        height: Math.round(w / firstRatio),
+        width: columnPx,
+        height: Math.max(1, Math.round(scale * first.h)),
+        scale,
+        unitFallback,
         primaryRows,
         perRow,
         hasDeco,
         labelHeight,
-        faceRatios: tallest,
+        faceRatios: tallestRatios,
+        faceBoxes,
+        minShort,
       });
     }
 
     const voidBelow = (layout: SwatchLayout) =>
       specsTop - (sizeMatrixTop(layout) + sizeMatrixH + FOOTNOTES_MAX_H);
 
-    const usable = candidates.filter(
+    const fitted = candidates.filter(
       (layout) => layout.width >= MIN_SWATCH_W && voidBelow(layout) >= 8,
     );
-    const tight = usable.filter((layout) => voidBelow(layout) <= MAX_VOID_ABOVE_SPECS);
-    const pool = tight.length > 0 ? tight : usable.length > 0 ? usable : candidates;
-    pool.sort((a, b) => b.width - a.width || a.primaryRows - b.primaryRows);
-    return pool[0];
+    const readable = fitted.filter((layout) => layout.minShort >= MIN_SHORT_PX);
+    const poolSource = readable.length > 0 ? readable : fitted.length > 0 ? fitted : candidates;
+    const tight = poolSource.filter((layout) => voidBelow(layout) <= MAX_VOID_ABOVE_SPECS);
+    const pool = tight.length > 0 ? tight : poolSource;
+    pool.sort((a, b) => b.scale - a.scale || a.primaryRows - b.primaryRows);
+    const chosen = pool[0];
+    return {
+      width: chosen.width,
+      height: chosen.height,
+      scale: chosen.scale,
+      unitFallback: chosen.unitFallback,
+      primaryRows: chosen.primaryRows,
+      perRow: chosen.perRow,
+      hasDeco: chosen.hasDeco,
+      labelHeight: chosen.labelHeight,
+      faceRatios: chosen.faceRatios,
+      faceBoxes: chosen.faceBoxes,
+    };
   };
 
   const single = pick(SWATCH_LABEL_H);
@@ -191,9 +264,23 @@ function clampRatio(ratio: number): number {
 export function getSwatchLayout(data: BrochureData): SwatchLayout {
   const resolved = data.colors.map((color) => resolveSwatchFaces(color, data.sizes));
   const ratios = resolved.map((faces) => faces.map((face) => face.ratio));
+  const anyInches = resolved.some((faces) =>
+    faces.some((face) => !face.sizeUnknown && face.widthIn && face.heightIn),
+  );
+  const inches = resolved.map((faces) =>
+    faces.map((face) => {
+      if (!face.sizeUnknown && face.widthIn && face.heightIn) {
+        return { widthIn: face.widthIn, heightIn: face.heightIn };
+      }
+      if (!anyInches || face.sizeUnknown === false) return null;
+      const sibling = faces.find((other) => !other.sizeUnknown && other.widthIn && other.heightIn);
+      const side = sibling ? Math.min(sibling.widthIn!, sibling.heightIn!) : 4;
+      return { widthIn: side, heightIn: side };
+    }),
+  );
   const hasDeco = resolved.some((faces) => faces.some((face) => /\bdeco\b/i.test(face.caption)));
   const names = resolved.flatMap((faces) => faces.map((face) => face.caption));
-  return computeSwatchLayout(data.colors.length, hasDeco, names, ratios);
+  return computeSwatchLayout(data.colors.length, hasDeco, names, ratios, inches);
 }
 
 /** Default page-relative coords for every draggable block. Page is which

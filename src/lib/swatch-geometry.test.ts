@@ -76,6 +76,8 @@ describe("nominal size to frame ratio", () => {
     assert.equal(faces[1].ratio, faces[2].ratio);
     assert.equal(faces[0].caption.includes("deep glaze"), true);
     assert.equal(faces[1].caption, "glossy");
+    assert.equal(faces[0].photoMismatch, true);
+    assert.equal(faces[1].photoMismatch, true);
   });
 
   it("marks a swatch size unknown instead of using a 1:2 frame", () => {
@@ -92,6 +94,8 @@ describe("nominal size to frame ratio", () => {
   it("contains a wide factory crop and crops a photo that already matches the tile", () => {
     assert.equal(swatchFit(1, 670, 210), "contain");
     assert.equal(swatchFit(16 / 3, 670, 210), "contain");
+    assert.equal(swatchFit(16 / 3, 1200, 225), "cover");
+    assert.equal(swatchFit(1, 1250, 1250), "cover");
     assert.equal(swatchFit(0.25, 400, 1600), "cover");
     assert.equal(swatchFit(2, 1080, 540), "cover");
     assert.equal(swatchFit(1, null, null, true), "contain");

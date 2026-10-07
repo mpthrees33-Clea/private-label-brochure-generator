@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchRemoteImage, isDeniedImageHost } from "@/lib/image-fetch";
 import { sniffImageMime } from "@/lib/image-sniff";
 import { upgradeImageUrl } from "@/lib/image-url";
+import { trimNearWhite } from "@/lib/image-trim";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,24 +38,29 @@ export async function GET(req: NextRequest) {
     if (!buf) {
       return NextResponse.json({ error: "Upstream image fetch failed" }, { status: 502 });
     }
-    const sniffed = sniffImageMime(new Uint8Array(buf.bytes));
+    const trim = req.nextUrl.searchParams.get("trim") === "1";
+    const trimmed = trim ? await trimNearWhite(buf.bytes) : null;
+    const body = trimmed?.bytes ?? buf.bytes;
+    const sniffed = sniffImageMime(new Uint8Array(body));
     const headerType = buf.contentType.toLowerCase();
-    const contentType = headerType.startsWith("image/")
-      ? buf.contentType
-      : sniffed;
+    const contentType = sniffed
+      ? sniffed
+      : headerType.startsWith("image/")
+        ? buf.contentType
+        : null;
     if (!contentType) {
       return NextResponse.json(
         { error: `Not an image (Content-Type: ${buf.contentType || "unknown"})` },
         { status: 415 },
       );
     }
-    return new NextResponse(new Uint8Array(buf.bytes), {
+    return new NextResponse(new Uint8Array(body), {
       status: 200,
       headers: {
         "Content-Type": contentType,
         // 1 day in browser, 7 days at CDN.
         "Cache-Control": "public, max-age=86400, s-maxage=604800, immutable",
-        "Content-Length": String(buf.bytes.byteLength),
+        "Content-Length": String(body.byteLength),
       },
     });
   } catch (err) {

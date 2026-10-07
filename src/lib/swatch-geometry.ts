@@ -7,29 +7,83 @@ export interface ResolvedFace {
   ratio: number;
   /** No nominal size was parsed. The frame is not guessed as 1:2. */
   sizeUnknown: boolean;
+  widthIn?: number | null;
+  heightIn?: number | null;
   photoWidth?: number | null;
   photoHeight?: number | null;
+  /** The only photo we have is a different shape than the tile. Contain it. */
+  photoMismatch?: boolean;
   caption: string;
 }
 
+/** A trimmed tile photo is close enough to the nominal frame to crop into it. */
+export const PHOTO_RATIO_TOLERANCE = 0.1;
+
+export function aspectWithin(
+  photoWidth: number,
+  photoHeight: number,
+  ratio: number,
+  tolerance = PHOTO_RATIO_TOLERANCE,
+): boolean {
+  if (!(photoWidth > 0) || !(photoHeight > 0) || !(ratio > 0)) return false;
+  const photo = photoWidth / photoHeight;
+  const delta = photo > ratio ? photo / ratio : ratio / photo;
+  return delta <= 1 + tolerance;
+}
+
 /**
- * Crop to the nominal frame when the file is already about that shape.
- * A factory card that is a much wider crop (the 670×210 Aura strip of a
- * square deco) is contained instead, so the pattern is not sliced.
+ * Cover when the photo (after a white trim) already matches the tile.
+ * A factory card that is a different shape is contained, and the editor
+ * flags it, until a full-face file is found.
  */
 export function swatchFit(
   ratio: number,
   photoWidth?: number | null,
   photoHeight?: number | null,
   sizeUnknown?: boolean,
+  photoMismatch?: boolean,
 ): "cover" | "contain" {
-  if (sizeUnknown) return "contain";
+  if (sizeUnknown || photoMismatch) return "contain";
   if (!photoWidth || !photoHeight || photoWidth <= 0 || photoHeight <= 0 || ratio <= 0) {
     return "cover";
   }
-  const photo = photoWidth / photoHeight;
-  const delta = photo > ratio ? photo / ratio : ratio / photo;
-  return delta > 1.6 ? "contain" : "cover";
+  return aspectWithin(photoWidth, photoHeight, ratio) ? "cover" : "contain";
+}
+
+/** Width and height in inches, oriented the way the frame is drawn. */
+export function nominalUnits(
+  ratio: number,
+  widthIn?: number | null,
+  heightIn?: number | null,
+): { w: number; h: number } {
+  if (widthIn && heightIn && widthIn > 0 && heightIn > 0) {
+    const short = Math.min(widthIn, heightIn);
+    const long = Math.max(widthIn, heightIn);
+    if (ratio >= 1) return { w: long, h: short };
+    return { w: short, h: long };
+  }
+  const r = clamp(ratio);
+  if (r >= 1) return { w: r, h: 1 };
+  return { w: 1, h: 1 / r };
+}
+
+export function facePhotoMismatch(face: {
+  photoMismatch?: boolean | null;
+  sizeUnknown?: boolean | null;
+  aspectRatio?: number | null;
+  widthIn?: number | null;
+  heightIn?: number | null;
+  photoWidth?: number | null;
+  photoHeight?: number | null;
+}): boolean {
+  if (face.photoMismatch) return true;
+  if (face.sizeUnknown) return false;
+  const ratio =
+    face.aspectRatio && face.aspectRatio > 0
+      ? face.aspectRatio
+      : nominalAspectRatio(face.widthIn, face.heightIn);
+  if (!ratio || !face.photoWidth || !face.photoHeight) return false;
+  return !aspectWithin(face.photoWidth, face.photoHeight, ratio);
 }
 
 /**
@@ -68,8 +122,15 @@ export function resolveSwatchFaces(
         imageUrl: face.imageUrl,
         ratio: resolved.ratio,
         sizeUnknown: resolved.sizeUnknown,
+        widthIn: face.widthIn,
+        heightIn: face.heightIn,
         photoWidth: face.photoWidth,
         photoHeight: face.photoHeight,
+        photoMismatch: facePhotoMismatch({
+          ...face,
+          aspectRatio: resolved.ratio,
+          sizeUnknown: resolved.sizeUnknown,
+        }),
         caption: faceCaption(color.trinityName, face, index, stored),
       };
     });
@@ -84,10 +145,13 @@ export function resolveSwatchFaces(
       fromName?.widthIn ?? fieldSizeIn(fieldSize)?.widthIn,
       fromName?.heightIn ?? fieldSizeIn(fieldSize)?.heightIn,
     );
+    const fieldIn = fromName ?? fieldSizeIn(fieldSize);
     faces.push({
       imageUrl: color.imageUrl,
       ratio: resolved.ratio,
       sizeUnknown: resolved.sizeUnknown,
+      widthIn: fieldIn?.widthIn,
+      heightIn: fieldIn?.heightIn,
       caption: color.trinityName,
     });
   }
@@ -97,10 +161,13 @@ export function resolveSwatchFaces(
       fromName?.widthIn ?? fieldSizeIn(decoSize)?.widthIn,
       fromName?.heightIn ?? fieldSizeIn(decoSize)?.heightIn,
     );
+    const decoIn = fromName ?? fieldSizeIn(decoSize);
     faces.push({
       imageUrl: color.decoImageUrl,
       ratio: resolved.ratio,
       sizeUnknown: resolved.sizeUnknown,
+      widthIn: decoIn?.widthIn,
+      heightIn: decoIn?.heightIn,
       caption: `${color.trinityName.replace(/\s+deco$/i, "")} deco`,
     });
   }
@@ -111,6 +178,8 @@ export function resolveSwatchFaces(
       imageUrl: "",
       ratio: resolved.ratio,
       sizeUnknown: resolved.sizeUnknown,
+      widthIn: box?.widthIn,
+      heightIn: box?.heightIn,
       caption: color.trinityName,
     });
   }

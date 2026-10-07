@@ -44,6 +44,42 @@ describe("compressForPrint", () => {
     assert.equal(meta.height, 320);
   });
 
+  it("trims white padding before a plank is fitted", async () => {
+    const source = await sharp({
+      create: {
+        width: 400,
+        height: 400,
+        channels: 3,
+        background: { r: 255, g: 255, b: 255 },
+      },
+    })
+      .composite([
+        {
+          input: await sharp({
+            create: {
+              width: 320,
+              height: 60,
+              channels: 3,
+              background: { r: 214, g: 196, b: 166 },
+            },
+          })
+            .jpeg()
+            .toBuffer(),
+          left: 40,
+          top: 170,
+        },
+      ])
+      .jpeg()
+      .toBuffer();
+    const out = await compressForPrint(source, { width: 160, height: 30, fit: "cover", trim: true });
+    const meta = await sharp(out.bytes).metadata();
+    assert.equal(meta.width, 320);
+    assert.equal(meta.height, 60);
+    const pixel = await sharp(out.bytes).raw().toBuffer();
+    const mid = Math.floor(pixel.length / 2);
+    assert.ok(pixel[mid] < 250, `trimmed plank stayed white (${pixel[mid]})`);
+  });
+
   it("keeps a transparent logo as PNG and does not enlarge it", async () => {
     const source = await sharp({
       create: {

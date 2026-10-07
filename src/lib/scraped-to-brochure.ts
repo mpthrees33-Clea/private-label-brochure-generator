@@ -27,6 +27,7 @@ export function scrapedToBrochure(
         sizeUnknown: face.sizeUnknown ?? face.aspectRatio == null,
         photoWidth: face.photoWidth ?? null,
         photoHeight: face.photoHeight ?? null,
+        photoMismatch: face.photoMismatch ?? false,
         isDeco: face.isDeco ?? false,
       })),
     })),

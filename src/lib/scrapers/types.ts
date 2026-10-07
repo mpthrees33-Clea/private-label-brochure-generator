@@ -31,6 +31,8 @@ export interface ScrapedFace {
   sizeUnknown?: boolean;
   photoWidth?: number | null;
   photoHeight?: number | null;
+  /** Kept only because no full-face photo matched the nominal size. */
+  photoMismatch?: boolean;
   isDeco?: boolean;
 }
 

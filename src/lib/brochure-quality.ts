@@ -17,6 +17,7 @@ export type MissingField =
   | "color-images"
   | "sizes"
   | "swatch-size"
+  | "photo-shape"
   | "tech-specs";
 
 export function filledTechSpecCount(data: Pick<BrochureData, "techSpecs">): number {
@@ -52,7 +53,18 @@ export function brochureWarnings(data: BrochureData): MissingField[] {
   const warnings: MissingField[] = [];
   if (filledTechSpecCount(data) < MIN_TECH_SPECS) warnings.push("tech-specs");
   if (unknownSwatchCaptions(data).length > 0) warnings.push("swatch-size");
+  if (mismatchedSwatchCaptions(data).length > 0) warnings.push("photo-shape");
   return warnings;
+}
+
+export function mismatchedSwatchCaptions(data: BrochureData): string[] {
+  const captions: string[] = [];
+  for (const color of data.colors ?? []) {
+    for (const face of resolveSwatchFaces(color, data.sizes ?? [])) {
+      if (face.photoMismatch) captions.push(face.caption);
+    }
+  }
+  return captions;
 }
 
 export function unknownSwatchCaptions(data: BrochureData): string[] {
@@ -80,5 +92,6 @@ export const MISSING_FIELD_LABELS: Record<MissingField, string> = {
   sizes: "size list",
   "swatch-size":
     "nominal size for one or more swatches (marked size unknown — the frame is not guessed as 12×24)",
+  "photo-shape": "photo shape doesn't match tile size",
   "tech-specs": `technical specifications (add at least ${MIN_TECH_SPECS} in Edit fields, or paste a spec-sheet URL)`,
 };

@@ -17,6 +17,8 @@ export interface BrochureFace {
   sizeUnknown?: boolean;
   photoWidth?: number | null;
   photoHeight?: number | null;
+  /** The photo's shape does not match the nominal tile. Shown contained. */
+  photoMismatch?: boolean;
   isDeco?: boolean;
 }
 
