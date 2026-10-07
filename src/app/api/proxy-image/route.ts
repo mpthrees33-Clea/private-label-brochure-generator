@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fetchRemoteImage, isDeniedImageHost } from "@/lib/image-fetch";
+import { sniffImageMime } from "@/lib/image-sniff";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,8 +12,6 @@ export const dynamic = "force-dynamic";
 // it back from our origin. The browser sees a same-origin URL and
 // loads it normally. Aggressively cached at the CDN edge so warmed-up
 // requests are fast.
-
-const SSRF_HOST_DENYLIST = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|::1$)/i;
 
 export async function GET(req: NextRequest) {
   const target = req.nextUrl.searchParams.get("url");
@@ -27,44 +27,33 @@ export async function GET(req: NextRequest) {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     return NextResponse.json({ error: "protocol not allowed" }, { status: 400 });
   }
-  if (SSRF_HOST_DENYLIST.test(parsed.hostname)) {
+  if (isDeniedImageHost(parsed.hostname)) {
     return NextResponse.json({ error: "host denied" }, { status: 403 });
   }
 
   try {
-    const upstream = await fetch(parsed.toString(), {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        // Some factory CDNs require a same-origin Referer to avoid
-        // hotlink blocks. Set it to the image's own origin.
-        Referer: parsed.origin + "/",
-        Accept: "image/*,*/*;q=0.8",
-      },
-      redirect: "follow",
-    });
-    if (!upstream.ok) {
-      return NextResponse.json(
-        { error: `Upstream ${upstream.status}` },
-        { status: 502 },
-      );
+    const buf = await fetchRemoteImage(parsed.toString());
+    if (!buf) {
+      return NextResponse.json({ error: "Upstream image fetch failed" }, { status: 502 });
     }
-    const contentType =
-      upstream.headers.get("content-type") ?? "application/octet-stream";
-    if (!contentType.toLowerCase().startsWith("image/")) {
+    const sniffed = sniffImageMime(new Uint8Array(buf.bytes));
+    const headerType = buf.contentType.toLowerCase();
+    const contentType = headerType.startsWith("image/")
+      ? buf.contentType
+      : sniffed;
+    if (!contentType) {
       return NextResponse.json(
-        { error: `Not an image (Content-Type: ${contentType})` },
+        { error: `Not an image (Content-Type: ${buf.contentType || "unknown"})` },
         { status: 415 },
       );
     }
-    const buf = await upstream.arrayBuffer();
-    return new NextResponse(buf, {
+    return new NextResponse(new Uint8Array(buf.bytes), {
       status: 200,
       headers: {
         "Content-Type": contentType,
         // 1 day in browser, 7 days at CDN.
         "Cache-Control": "public, max-age=86400, s-maxage=604800, immutable",
-        "Content-Length": String(buf.byteLength),
+        "Content-Length": String(buf.bytes.byteLength),
       },
     });
   } catch (err) {
@@ -72,3 +61,4 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: `Fetch failed: ${msg}` }, { status: 502 });
   }
 }
+

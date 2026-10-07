@@ -10,13 +10,18 @@ const ROW_GAP = 8;
 export function ColorSwatchGrid({
   colors,
   swatchWidth,
+  swatchHeight,
   perRow,
+  labelHeight = 22,
 }: {
   colors: BrochureColor[];
   swatchWidth: number;
+  swatchHeight: number;
   perRow: number;
+  /** Reserved caption box. Long names wrap inside it and cannot paint over the size chart. */
+  labelHeight?: number;
 }) {
-  const hasDeco = colors.some((c) => c.decoImageUrl);
+  const hasDeco = colors.some((c) => c.decoImageUrl && c.decoImageUrl.trim());
   const chunks: BrochureColor[][] = [];
   for (let i = 0; i < colors.length; i += perRow) {
     chunks.push(colors.slice(i, i + perRow));
@@ -25,9 +30,20 @@ export function ColorSwatchGrid({
     <div style={{ display: "flex", flexDirection: "column", gap: `${ROW_GAP}px` }}>
       {chunks.map((row, idx) => (
         <div key={idx}>
-          <SwatchRow colors={row} swatchWidth={swatchWidth} />
+          <SwatchRow
+            colors={row}
+            swatchWidth={swatchWidth}
+            swatchHeight={swatchHeight}
+            labelHeight={labelHeight}
+          />
           {hasDeco && (
-            <SwatchRow colors={row} swatchWidth={swatchWidth} deco />
+            <SwatchRow
+              colors={row}
+              swatchWidth={swatchWidth}
+              swatchHeight={swatchHeight}
+              labelHeight={labelHeight}
+              deco
+            />
           )}
         </div>
       ))}
@@ -38,10 +54,14 @@ export function ColorSwatchGrid({
 function SwatchRow({
   colors,
   swatchWidth,
+  swatchHeight,
+  labelHeight,
   deco = false,
 }: {
   colors: BrochureColor[];
   swatchWidth: number;
+  swatchHeight: number;
+  labelHeight: number;
   deco?: boolean;
 }) {
   return (
@@ -51,15 +71,26 @@ function SwatchRow({
     >
       {colors.map((c) => {
         const src = deco ? c.decoImageUrl ?? undefined : c.imageUrl;
-        const label = deco ? `${c.trinityName} deco` : c.trinityName;
+        const baseName = c.trinityName.replace(/\s+deco$/i, "");
+        const label = deco ? `${baseName} deco` : c.trinityName;
+        if (deco && !src) {
+          return (
+            <div
+              key={c.trinityName + "-deco-empty"}
+              style={{ width: swatchWidth, height: swatchHeight }}
+              aria-hidden
+            />
+          );
+        }
         return (
           <div
             key={c.trinityName + (deco ? "-deco" : "")}
             className="flex flex-col"
+            style={{ width: swatchWidth }}
           >
             <div
               className="aspect-[1/2] overflow-hidden bg-[#f3f3f3]"
-              style={{ width: swatchWidth }}
+              style={{ width: swatchWidth, height: swatchHeight }}
             >
               {src ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -67,10 +98,23 @@ function SwatchRow({
                   src={proxyImageUrl(src)}
                   alt={label}
                   className="h-full w-full object-cover"
+                  data-print-w={swatchWidth}
+                  data-print-h={swatchHeight}
+                  data-print-fit="cover"
                 />
               ) : null}
             </div>
-            <span className="mt-1 text-[11px] lowercase text-brochure-gray">
+            <span
+              className="lowercase text-brochure-gray"
+              style={{
+                display: "block",
+                marginTop: 4,
+                fontSize: 11,
+                lineHeight: 1.15,
+                maxHeight: Math.max(12, labelHeight - 4),
+                overflow: "hidden",
+              }}
+            >
               {label}
             </span>
           </div>

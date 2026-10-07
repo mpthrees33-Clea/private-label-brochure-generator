@@ -50,18 +50,16 @@ export default async function ScrapeRenderPage({
           <Link href="/internal/scrape" className="text-accent underline">
             ← Try another URL
           </Link>
+          {" · "}
+          <Link href="/internal/scrape?mode=pdf" className="text-accent underline">
+            Upload PDF
+          </Link>
         </p>
       </main>
     );
   }
 
   const data = scrapedToBrochure(scraped);
-  // Fallback Trinity name if AI didn't suggest one — keeps the product
-  // creatable; the rep is forced to rename it on the next page before
-  // the Download button enables. (`""` would fail the quality gate.)
-  if (!data.trinityName || data.trinityName.trim() === "") {
-    data.trinityName = "rename-me";
-  }
 
   const created = await createProduct({
     ...data,

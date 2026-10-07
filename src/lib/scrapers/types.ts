@@ -15,6 +15,8 @@ export interface TechSpecs {
   scratchHardness?: string;
   breakingStrength?: string;
   dcof?: string;
+  /** DIN 51130 / EN 16165 ramp rating (R9–R13). Not an ANSI A326.3 DCOF. */
+  slipResistance?: string;
 }
 
 export interface ScrapedColor {
@@ -28,6 +30,8 @@ export interface ScrapedSize {
   thickness?: string;
   iconKind: SizeIcon;
   isDeco?: boolean;
+  /** Nominal mesh sheet, e.g. 12"x12", for a mosaic chip. */
+  sheetLabel?: string;
   /** Finishes this specific size column comes in (e.g. ["matte"] or
    *  ["grip"] for an outdoor paver). When unset, the chart renderer
    *  falls back to the global finishLegend. */
@@ -46,7 +50,17 @@ export interface ScrapedProduct {
   colors: ScrapedColor[];
   sizes: ScrapedSize[];
   availability: Record<string, string[]>;
+  /** color (lowercase) → size chart label → finishes actually offered.
+   *  Set when a color doesn't come in every finish of that size
+   *  (cream subway is glossy only; white is glossy and matte). */
+  availabilityFinishes?: Record<string, Record<string, string[]>>;
   techSpecs: Partial<TechSpecs>;
+  /** Test method printed next to each value. */
+  specStandards?: Partial<Record<keyof TechSpecs, string>>;
+  /** Document URL each value was read from. */
+  specSources?: Partial<Record<keyof TechSpecs, string>>;
+  /** Trims and named decors shown as one line under the size chart. */
+  specialPieces?: string[];
   finishLegend: string[];
   footnotes: string[];
 }

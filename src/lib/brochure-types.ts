@@ -17,6 +17,8 @@ export interface BrochureSize {
   thickness?: string | null; // e.g. '8.5mm'
   iconKind: SizeIcon;
   isDeco?: boolean;
+  /** Nominal mesh sheet, e.g. 12"x12", printed after a mosaic chip. */
+  sheetLabel?: string | null;
   footnoteRef?: string | null;
   /** Finishes this size column comes in. Overrides the global
    *  finishLegend for chart-marker rendering when set. Used when a
@@ -35,11 +37,20 @@ export interface BrochureData {
   sizes: BrochureSize[];
   /** Map of color trinityName → list of size labels that are available */
   availability: Record<string, string[]>;
+  /** color → size chart label → finishes for that cell. Overrides the
+   *  size-level finish list when a color is missing a finish. */
+  availabilityFinishes?: Record<string, Record<string, string[]>>;
   /** Legend bullets shown next to the sizes matrix, e.g. ["matte", "textured"] */
   finishLegend: string[];
   /** Optional footnotes shown under the sizes matrix */
   footnotes: string[];
+  /** Trims and named specials that do not fit a size-chart column. */
+  specialPieces?: string[];
   techSpecs: Partial<TechSpecs>;
+  /** Test method cited by the factory for each spec. Absent keys keep the template default. */
+  specStandards?: Partial<Record<keyof TechSpecs, string>>;
+  /** Page or spec-sheet URL each value was read from. */
+  specSources?: Partial<Record<keyof TechSpecs, string>>;
   /** Per-block manual position overrides set by the rep in the
    *  drag-to-position editor. Missing keys use the layout defaults. */
   layoutOverrides?: LayoutOverrides;

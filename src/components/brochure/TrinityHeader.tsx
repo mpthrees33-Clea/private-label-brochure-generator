@@ -18,6 +18,8 @@ export function TrinityHeader({
         src="/brand/trinity-tile-logo.png"
         alt="trinity tile"
         className="h-auto w-[104px] object-contain"
+        data-print-w={104}
+        data-print-fit="inside"
       />
     </header>
   );

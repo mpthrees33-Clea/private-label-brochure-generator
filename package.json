@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && node scripts/build-brochure-css.mjs && next build",
+    "pdf:css": "node scripts/build-brochure-css.mjs",
     "start": "next start",
     "lint": "next lint",
+    "test": "node --import tsx --test src/lib/brochure-layout.test.ts src/lib/tech-spec-columns.test.ts src/lib/pdf/print-image.test.ts src/lib/pdf/inline-images.test.ts src/lib/scrapers/normalize.test.ts src/lib/scrapers/listed-sizes.test.ts src/lib/scrapers/spec-parse.test.ts src/lib/trinity-names.test.ts",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
@@ -29,6 +31,8 @@
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sharp": "^0.33.5",
+    "unpdf": "^1.8.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {

@@ -1,9 +1,10 @@
 import type { BrochureData } from "./brochure-types";
 
-// Quality gate: every brochure must have these fields populated before
-// the rep is allowed to save. The user has been explicit — half-baked
-// brochures are worse than no brochure. Surface what's missing on the
-// preview, block Save until resolved.
+// Blocking gate: description, images, colors, and sizes must be present
+// before a PDF is saved or downloaded. Technical specifications are a
+// warning. Factories often omit them, and marketing can add them in the
+// editor. Until four real values are filled, the specs table stays off
+// the PDF (or shows only the values that were actually found).
 
 const MIN_TECH_SPECS = 4;
 
@@ -15,6 +16,12 @@ export type MissingField =
   | "color-images"
   | "sizes"
   | "tech-specs";
+
+export function filledTechSpecCount(data: Pick<BrochureData, "techSpecs">): number {
+  return Object.values(data.techSpecs ?? {}).filter(
+    (v) => v != null && String(v).trim() !== "",
+  ).length;
+}
 
 export function missingBrochureFields(data: BrochureData): MissingField[] {
   const missing: MissingField[] = [];
@@ -35,13 +42,13 @@ export function missingBrochureFields(data: BrochureData): MissingField[] {
   if (!data.sizes || data.sizes.length === 0) {
     missing.push("sizes");
   }
-  const specCount = Object.values(data.techSpecs ?? {}).filter(
-    (v) => v != null && String(v).trim() !== "",
-  ).length;
-  if (specCount < MIN_TECH_SPECS) {
-    missing.push("tech-specs");
-  }
   return missing;
+}
+
+/** Shown in the editor. Does not block download or save. */
+export function brochureWarnings(data: BrochureData): MissingField[] {
+  if (filledTechSpecCount(data) < MIN_TECH_SPECS) return ["tech-specs"];
+  return [];
 }
 
 export const MISSING_FIELD_LABELS: Record<MissingField, string> = {
@@ -51,5 +58,5 @@ export const MISSING_FIELD_LABELS: Record<MissingField, string> = {
   colors: "any colors",
   "color-images": "swatch images for one or more colors",
   sizes: "size list",
-  "tech-specs": `technical specifications (need at least ${MIN_TECH_SPECS} filled)`,
+  "tech-specs": `technical specifications (add at least ${MIN_TECH_SPECS} in Edit fields, or paste a spec-sheet URL)`,
 };

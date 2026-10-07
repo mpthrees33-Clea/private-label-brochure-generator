@@ -5,10 +5,11 @@ import type {
 } from "@/lib/brochure-types";
 import {
   BLOCK_DEFAULTS,
+  CONTENT_W,
   PAGE_W,
   PAGE_H,
-  HEADER_H,
   getSwatchLayout,
+  sizeMatrixTop,
   type SwatchLayout,
 } from "@/lib/brochure-layout";
 import { renderDescription } from "@/lib/brochure-description";
@@ -20,32 +21,13 @@ import { TechSpecsTable } from "./TechSpecsTable";
 import { ContactBlock } from "./ContactBlock";
 import { FinishMarker } from "./FinishMarker";
 
-// Vertical geometry for the page-2 mid-section. Swatches stack into rows
-// then size matrix flows immediately below them. Used to compute a sane
-// DEFAULT y for the sizeMatrix block — once the rep drags it, the
-// override coord wins.
-const PAGE2_TOP = HEADER_H + 12;
-const SECTION_GAP = 8;
-const SWATCH_LABEL_H = 18;
-const SWATCH_ROW_GAP_BETWEEN_ROWS = 8;
-
-function defaultSizeMatrixY(data: BrochureData, swatch: SwatchLayout): number {
-  const hasDeco = data.colors.some((c) => c.decoImageUrl);
-  const visualRowsPerPrimary = hasDeco ? 2 : 1;
-  const visualRows = swatch.primaryRows * visualRowsPerPrimary;
-  const swatchH =
-    visualRows * (swatch.height + SWATCH_LABEL_H) +
-    Math.max(0, visualRows - 1) * SWATCH_ROW_GAP_BETWEEN_ROWS;
-  return PAGE2_TOP + swatchH + SECTION_GAP;
-}
-
 export function resolveBlockPosition(
   id: BlockId,
   data: BrochureData,
   swatch: SwatchLayout,
 ): BlockPosition & { width: number; page: 1 | 2 } {
   const defaults = BLOCK_DEFAULTS[id];
-  const dynamicY = id === "sizeMatrix" ? defaultSizeMatrixY(data, swatch) : defaults.y;
+  const dynamicY = id === "sizeMatrix" ? sizeMatrixTop(swatch) : defaults.y;
   const override = data.layoutOverrides?.[id];
   return {
     page: defaults.page,
@@ -104,6 +86,9 @@ function Page1({
               src={proxyImageUrl(data.heroImageUrl)}
               alt={data.trinityName}
               className="h-full w-full object-cover"
+              data-print-w={CONTENT_W}
+              data-print-h={Math.round((CONTENT_W * 20) / 19)}
+              data-print-fit="cover"
             />
           ) : null}
         </div>
@@ -135,7 +120,9 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
         <ColorSwatchGrid
           colors={data.colors}
           swatchWidth={swatch.width}
+          swatchHeight={swatch.height}
           perRow={swatch.perRow}
+          labelHeight={swatch.labelHeight}
         />
       </Block>
       <Block id="sizeMatrix" pos={sizeMatrixPos}>
@@ -143,28 +130,40 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
           sizes={data.sizes}
           colors={data.colors}
           availability={data.availability}
+          availabilityFinishes={data.availabilityFinishes}
           finishLegend={data.finishLegend}
         />
+        {data.specialPieces && data.specialPieces.length > 0 && (
+          <p className="mt-1 text-[10px] lowercase leading-tight text-brochure-gray">
+            trims & special pieces: {data.specialPieces.join(", ")}
+          </p>
+        )}
         {(data.finishLegend.length > 0 || data.footnotes.length > 0) && (
-          <div className="mt-1.5 flex justify-between text-[10px] lowercase text-brochure-gray">
-            <div>
-              {data.footnotes.map((f) => (
-                <p key={f}>{f}</p>
-              ))}
-            </div>
-            <div className="flex items-center gap-3">
-              {data.finishLegend.map((l) => (
-                <span key={l} className="flex items-center gap-1">
-                  <FinishMarker finish={l} variant="legend" />
-                  {l}
-                </span>
-              ))}
-            </div>
+          <div className="mt-1.5 text-[10px] lowercase leading-tight text-brochure-gray">
+            {data.footnotes.map((f) => (
+              <p key={f} className="max-w-full break-words">
+                {f}
+              </p>
+            ))}
+            {data.finishLegend.length > 0 && (
+              <div className="mt-0.5 flex items-center justify-end gap-3">
+                {data.finishLegend.map((l) => (
+                  <span key={l} className="flex items-center gap-1">
+                    <FinishMarker finish={l} variant="legend" />
+                    {l}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </Block>
       <Block id="techSpecs" pos={techSpecsPos}>
-        <TechSpecsTable specs={data.techSpecs} />
+        <TechSpecsTable
+          specs={data.techSpecs}
+          standards={data.specStandards}
+          sources={data.specSources}
+        />
       </Block>
       <Block id="contact" pos={contactPos}>
         <ContactBlock />

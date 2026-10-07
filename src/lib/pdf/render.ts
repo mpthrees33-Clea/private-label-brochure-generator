@@ -2,33 +2,34 @@ import puppeteer, { type Browser } from "puppeteer-core";
 import chromium from "@sparticuz/chromium-min";
 import { PDFDocument } from "pdf-lib";
 
-// @sparticuz/chromium-min downloads the chromium binary + shared libs
-// from GitHub releases to /tmp at runtime. This avoids the libnss3
-// "shared object not found" error that the bundled @sparticuz/chromium
-// package hits on Vercel's newer Node runtimes (Amazon Linux 2023
-// strips libraries the binary needs).
-const CHROMIUM_PACK_URL =
-  "https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar";
+// @sparticuz/chromium-min downloads a Chromium build (plus the shared
+// libraries Amazon Linux 2023 stripped out) to /tmp on first launch.
+// The pack version must match the installed npm package. Vercel
+// functions are x64; set CHROMIUM_PACK_URL to host the tar closer than
+// GitHub if cold starts are slow. Leave PUPPETEER_EXECUTABLE_PATH unset
+// on Vercel so this path is used. On the VPS, set
+// PUPPETEER_EXECUTABLE_PATH to system Chrome instead.
+const CHROMIUM_VERSION = "v148.0.0";
+const DEFAULT_PACK_URL =
+  process.arch === "arm64"
+    ? `https://github.com/Sparticuz/chromium/releases/download/${CHROMIUM_VERSION}/chromium-${CHROMIUM_VERSION}-pack.arm64.tar`
+    : `https://github.com/Sparticuz/chromium/releases/download/${CHROMIUM_VERSION}/chromium-${CHROMIUM_VERSION}-pack.x64.tar`;
 
-// chromium-min has loose types — these properties exist at runtime
-// (setters that flip internal flags + a readonly `headless` field)
-// but aren't declared. Cast to a permissive shape for access.
-type ChromiumExtras = {
-  setHeadlessMode: boolean;
-  setGraphicsMode: boolean;
-  readonly headless: boolean | "shell";
-};
+function chromiumPackUrl(): string {
+  const override = process.env.CHROMIUM_PACK_URL?.trim();
+  return override || DEFAULT_PACK_URL;
+}
+
+// chromium-min exposes setGraphicsMode as a setter. Disabling graphics
+// skips the swiftshader extract; brochure PDFs don't need WebGL.
+type ChromiumExtras = { setGraphicsMode: boolean };
 const chromiumExt = chromium as unknown as ChromiumExtras;
-chromiumExt.setHeadlessMode = true;
 chromiumExt.setGraphicsMode = false;
 
-// Render a brochure page (e.g. /internal/brochure/<id>) to a Letter-size
-// PDF buffer. Asserts page count === 2 — brochures must never silently
-// truncate the tech specs or spill onto page 3. See feedback_brochure_two_pages.
 // Cache the browser PROMISE (not the resolved browser) so concurrent
 // requests on a warm function instance share one launch. Closing the
-// browser between invocations is what causes ETXTBSY in the first
-// place — we keep it warm and only close pages.
+// browser between invocations is what causes ETXTBSY — keep it warm
+// and only close pages.
 let browserPromise: Promise<Browser> | null = null;
 
 async function getBrowser(): Promise<Browser> {
@@ -38,11 +39,9 @@ async function getBrowser(): Promise<Browser> {
   return browserPromise;
 }
 
-// Args for a real system chromium (VPS, local dev with apt-installed
-// chromium). The sparticuz lambda flags include --no-zygote and other
-// AWS-Lambda-specific knobs that misbehave on a real multi-process
-// chromium. Self-host runs sandbox-off because we're rendering trusted
-// local HTML, not arbitrary user content.
+// Args for a real system chromium (VPS, local dev). The sparticuz lambda
+// flags include --no-zygote and other AWS-Lambda knobs that misbehave
+// on a normal multi-process Chrome.
 const SYSTEM_CHROMIUM_ARGS = [
   "--no-sandbox",
   "--disable-setuid-sandbox",
@@ -53,9 +52,12 @@ const SYSTEM_CHROMIUM_ARGS = [
 ];
 
 async function launchBrowserWithRetry(maxRetries = 4): Promise<Browser> {
-  const local = process.env.PUPPETEER_EXECUTABLE_PATH;
-  const executablePath = local || (await chromium.executablePath(CHROMIUM_PACK_URL));
-  const args = local ? SYSTEM_CHROMIUM_ARGS : chromium.args;
+  const local = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
+  const executablePath = local || (await chromium.executablePath(chromiumPackUrl()));
+  const headless = local ? true : "shell";
+  const args = local
+    ? SYSTEM_CHROMIUM_ARGS
+    : puppeteer.defaultArgs({ args: chromium.args, headless: "shell" });
 
   let lastErr: unknown;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -64,13 +66,12 @@ async function launchBrowserWithRetry(maxRetries = 4): Promise<Browser> {
         args,
         defaultViewport: { width: 816, height: 1056 },
         executablePath,
-        headless: chromiumExt.headless === "shell" ? "shell" : true,
+        headless,
       });
     } catch (err) {
       lastErr = err;
       const msg = err instanceof Error ? err.message : String(err);
       // ETXTBSY = chromium binary still being written to /tmp.
-      // EBUSY = similar fs lock issue.
       if (msg.includes("ETXTBSY") || msg.includes("EBUSY")) {
         await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
         continue;
@@ -81,57 +82,36 @@ async function launchBrowserWithRetry(maxRetries = 4): Promise<Browser> {
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
-export async function renderBrochurePdf(brochureUrl: string): Promise<Uint8Array> {
+export async function renderBrochurePdf(html: string): Promise<Uint8Array> {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
     await page.setViewport({ width: 816, height: 1056, deviceScaleFactor: 2 });
-    // domcontentloaded is enough — Next.js RSC streaming keeps a connection
-    // open so networkidle0 would never fire. We manually wait for all images
-    // to finish loading below, which is the actual signal we care about.
-    await page.goto(brochureUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-    // Wait for every image to load OR error OR hit a per-image timeout.
-    // A hanging factory image (slow CDN, dead URL) used to keep this
-    // promise pending until the Vercel function killed the request,
-    // which surfaced as a grey screen in the browser. Now each image
-    // gets at most 5 seconds; after that we render whatever's there.
-    await page.evaluate(async (perImageTimeoutMs: number) => {
-      const imgs = Array.from(document.images);
-      await Promise.all(
-        imgs.map(
-          (img) =>
-            new Promise<void>((resolve) => {
-              if (img.complete && img.naturalHeight !== 0) {
-                resolve();
-                return;
-              }
-              const timer = setTimeout(() => resolve(), perImageTimeoutMs);
-              img.addEventListener(
-                "load",
-                () => {
-                  clearTimeout(timer);
-                  resolve();
-                },
-                { once: true },
-              );
-              img.addEventListener(
-                "error",
-                () => {
-                  clearTimeout(timer);
-                  resolve();
-                },
-                { once: true },
-              );
-            }),
-        ),
+    // Print media applies the @page letter/margin rules baked into the
+    // inlined stylesheet. setContent does not navigate. Anything that
+    // still tries to reach the app (loopback, deployment URL, /api,
+    // /_next) is a bug — Vercel has no listener and both hosts sit
+    // behind an auth wall.
+    const leaked: string[] = [];
+    page.on("request", (req) => {
+      const url = req.url();
+      if (url.startsWith("data:") || url === "about:blank") return;
+      leaked.push(url);
+    });
+    await page.emulateMediaType("print");
+    await page.setContent(html, { waitUntil: "load", timeout: 30000 });
+    if (leaked.length > 0) {
+      throw new Error(
+        `PDF render tried to fetch outside the inlined document: ${leaked.slice(0, 5).join(", ")}`,
       );
-    }, 5000);
+    }
+    await page.evaluate(async () => {
+      if (document.fonts?.ready) await document.fonts.ready;
+    });
 
     const pdfBytes = await page.pdf({
       format: "Letter",
       printBackground: true,
-      // Use the CSS @page rule (letter, margin 0) so Chromium and our
-      // print stylesheet agree on the page geometry.
       preferCSSPageSize: true,
       margin: { top: "0", right: "0", bottom: "0", left: "0" },
     });
@@ -148,7 +128,6 @@ export async function renderBrochurePdf(brochureUrl: string): Promise<Uint8Array
 
     return pdfBytes;
   } finally {
-    // Close the page but keep the browser warm for the next invocation.
     await page.close().catch(() => {});
   }
 }

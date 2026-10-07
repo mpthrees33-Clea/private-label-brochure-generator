@@ -1,6 +1,7 @@
 import { SEED_BACKFILL, SEED_PRODUCTS } from "./seed";
 import { readJsonStore, writeJsonStore } from "./blob-storage";
 import type { Product } from "./types";
+import { chooseTrinityName } from "../trinity-names";
 
 // Products are stored as a single JSON blob ("store/products.json").
 // Vercel Blob in prod, /tmp file locally. The store is read on every
@@ -101,6 +102,11 @@ export async function createProduct(
   const now = new Date().toISOString();
   const product: Product = {
     ...input,
+    trinityName: chooseTrinityName(
+      input.trinityName,
+      all.map((row) => row.trinityName),
+      { separate: true },
+    ),
     id: randomId(),
     createdAt: now,
     updatedAt: now,
@@ -117,9 +123,17 @@ export async function updateProduct(
   const all = await load();
   const idx = all.findIndex((p) => p.id === id);
   if (idx < 0) throw new Error(`Product ${id} not found`);
+  const nextName =
+    patch.trinityName === undefined
+      ? all[idx].trinityName
+      : chooseTrinityName(
+          patch.trinityName,
+          all.filter((row) => row.id !== id).map((row) => row.trinityName),
+        );
   const updated: Product = {
     ...all[idx],
     ...patch,
+    trinityName: nextName,
     id,
     createdAt: all[idx].createdAt,
     updatedAt: new Date().toISOString(),

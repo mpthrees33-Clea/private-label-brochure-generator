@@ -20,6 +20,24 @@ const CLUSTER_SPREAD_PX = 40;
  * product) ALWAYS win — these factory defaults are only the starting
  * position before the rep touches anything.
  */
+export async function withFactoryLayoutDefaults<
+  T extends { factoryUrl?: string | null; layoutOverrides?: LayoutOverrides | null },
+>(product: T): Promise<T> {
+  let factoryHost = "";
+  try {
+    factoryHost = product.factoryUrl
+      ? new URL(product.factoryUrl).hostname.replace(/^www\./, "")
+      : "";
+  } catch {
+    factoryHost = "";
+  }
+  const factoryDefaults = factoryHost ? await factoryLayoutDefaultsFor(factoryHost) : {};
+  return {
+    ...product,
+    layoutOverrides: { ...factoryDefaults, ...(product.layoutOverrides ?? {}) },
+  };
+}
+
 export async function factoryLayoutDefaultsFor(
   factoryHost: string,
 ): Promise<LayoutOverrides> {

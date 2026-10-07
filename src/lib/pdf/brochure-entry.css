@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Self-contained brochure stylesheet for headless PDF rendering.
+   The screen app loads this same Tailwind build through Next; the PDF
+   path inlines this file so Chromium never requests the app. */
+
+:root {
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-brand: "DM Sans", system-ui, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  color: #0d0f0b;
+}
+
+.brochure-root {
+  background: #ffffff;
+  color: #1a1a1a;
+}
+
+@page {
+  size: letter;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+  .brochure-root {
+    gap: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+  .brochure-page {
+    box-shadow: none !important;
+    overflow: hidden !important;
+    page-break-after: always;
+    break-after: page;
+  }
+  .brochure-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+}

@@ -9,7 +9,7 @@
 // Anything unrecognized falls back to the matte circle so the brochure
 // never renders blank — the rep can correct via the finishLegend field.
 
-type FinishShape = "circle" | "triangle" | "square" | "circle-outline";
+type FinishShape = "circle" | "triangle" | "square" | "circle-outline" | "diamond";
 
 const SHAPE_BY_FINISH: Record<string, FinishShape> = {
   matte: "circle",
@@ -20,11 +20,15 @@ const SHAPE_BY_FINISH: Record<string, FinishShape> = {
   lappato: "triangle",
   gloss: "triangle",
   glossy: "triangle",
+  "deep glaze": "circle-outline",
+  "3d plus": "triangle",
+  silk: "diamond",
   grip: "square",
   structured: "square",
   "non-slip": "square",
   textured: "circle-outline",
   brushed: "circle-outline",
+  "3d": "circle-outline",
 };
 
 function shapeFor(finish: string): FinishShape {
@@ -61,6 +65,12 @@ export function FinishMarker({
       return (
         <svg {...common}>
           <rect x="1" y="1" width="10" height="10" fill="currentColor" />
+        </svg>
+      );
+    case "diamond":
+      return (
+        <svg {...common}>
+          <polygon points="6,1 11,6 6,11 1,6" fill="currentColor" />
         </svg>
       );
     case "circle-outline":

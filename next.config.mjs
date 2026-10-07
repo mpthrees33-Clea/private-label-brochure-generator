@@ -7,9 +7,18 @@ const nextConfig = {
     serverComponentsExternalPackages: [
       "puppeteer-core",
       "@sparticuz/chromium",
+      "@sparticuz/chromium-min",
       "playwright",
       "exceljs",
+      "sharp",
+      "unpdf",
     ],
+    // Brand and sample images are read from disk while inlining the PDF
+    // HTML. Vercel does not put `public/` on the function filesystem
+    // unless it is traced.
+    outputFileTracingIncludes: {
+      "/api/brochure/pdf": ["./public/brand/**/*", "./public/sample/**/*"],
+    },
   },
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**" }],
