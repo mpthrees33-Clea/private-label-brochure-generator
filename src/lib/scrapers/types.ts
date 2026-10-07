@@ -28,6 +28,8 @@ export interface ScrapedSize {
   thickness?: string;
   iconKind: SizeIcon;
   isDeco?: boolean;
+  /** Nominal mesh sheet, e.g. 12"x12", for a mosaic chip. */
+  sheetLabel?: string;
   /** Finishes this specific size column comes in (e.g. ["matte"] or
    *  ["grip"] for an outdoor paver). When unset, the chart renderer
    *  falls back to the global finishLegend. */

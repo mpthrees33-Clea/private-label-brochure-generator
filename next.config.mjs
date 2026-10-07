@@ -11,6 +11,7 @@ const nextConfig = {
       "playwright",
       "exceljs",
       "sharp",
+      "unpdf",
     ],
     // Brand and sample images are read from disk while inlining the PDF
     // HTML. Vercel does not put `public/` on the function filesystem

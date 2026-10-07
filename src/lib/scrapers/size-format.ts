@@ -53,6 +53,7 @@ export function canonicalFinish(raw: string | null | undefined): string | null {
     .trim();
   s = s.replace(/\bdeco(?:rative|r)?\b/g, "").trim();
   if (!s || s === "n/a" || s === "na") return null;
+  if (/deep\s*glaze/.test(s)) return "deep glaze";
   if (/3d\s*plus|3dplus/.test(s)) return "3d plus";
   if (/^3d$/.test(s) || /\b3d\b/.test(s)) return "3d";
   if (/\bsilk\b/.test(s)) return "silk";
@@ -60,7 +61,7 @@ export function canonicalFinish(raw: string | null | undefined): string | null {
   if (/polish|lappato/.test(s)) return "polished";
   if (/grip|non slip|structured|antislip|anti slip/.test(s)) return "grip";
   if (/textur|brush/.test(s)) return "textured";
-  if (/matte|naturale|natural|honed/.test(s)) return "matte";
+  if (/matte|\bmatt\b|naturale|natural|honed/.test(s)) return "matte";
   return null;
 }
 
@@ -69,12 +70,26 @@ export function parseSizeLabel(raw: string): ParsedSize | null {
   if (!text) return null;
 
   const dim = text.match(
-    /(\d+(?:\.\d+)?)\s*(?:["”″])?\s*[x×]\s*(\d+(?:\.\d+)?)\s*(?:["”″])?\s*(cm|mm)?/i,
+    /(\d+(?:[._]\d+)?)\s*(?:["”″])?\s*[x×]\s*(\d+(?:[._]\d+)?)\s*(?:["”″])?\s*(cm|mm)?/i,
   );
-  if (!dim) return null;
+  if (!dim) {
+    // A trapezoid mosaic often has no chip rectangle, only a sheet size.
+    if (/\btrapezoids?\b/i.test(text)) {
+      return {
+        label: "trapezoid mosaic",
+        widthIn: 0,
+        heightIn: 0,
+        iconKind: "mosaic",
+        isDeco: false,
+        piece: "mosaic",
+        finish: finishFromSizeText(text),
+      };
+    }
+    return null;
+  }
 
-  let a = Number(dim[1]);
-  let b = Number(dim[2]);
+  let a = Number(dim[1].replace("_", "."));
+  let b = Number(dim[2].replace("_", "."));
   if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return null;
 
   const unit = (dim[3] ?? "").toLowerCase();
@@ -118,7 +133,7 @@ export function parseSizeLabel(raw: string): ParsedSize | null {
 
 function detectPiece(text: string): ParsedSize["piece"] {
   if (/\bbullnose\b|\bpencil\b|\blistello\b/i.test(text)) return "bullnose";
-  if (/\bmosaics?\b/i.test(text)) return "mosaic";
+  if (/\bmosaics?\b|\btrapezoids?\b/i.test(text)) return "mosaic";
   if (/\bchevron\b/i.test(text)) return "chevron";
   if (/\bpaver\b|\b2\s*cm\b|\b20\s*mm\b/i.test(text)) return "paver";
   return "field";
@@ -180,22 +195,41 @@ export function inferIconKind(
   return "rectangle";
 }
 
-/** Header text for one size column. Never appends "deco" twice. */
+/** Header text for one size column. Never appends "deco" twice.
+ *  Mesh-mounted mosaics keep the sheet in parentheses:
+ *  4"x4" mosaic (12"x12" sheet). */
 export function sizeChartLabel(size: {
   label: string;
   isDeco?: boolean | null;
+  sheetLabel?: string | null;
 }): string {
   const stripped = size.label
     .replace(/\s+deco$/i, "")
+    .replace(/\s+\([^)]*sheet\)\s*$/i, "")
     .replace(/\s+/g, " ")
     .trim();
   const deco = Boolean(size.isDeco) || /\bdeco\b/i.test(size.label);
-  return deco ? `${stripped} deco` : size.label.replace(/\s+/g, " ").trim();
+  let out = deco ? `${stripped} deco` : size.label.replace(/\s+\([^)]*sheet\)\s*$/i, "").replace(/\s+/g, " ").trim();
+  const sheet = (size.sheetLabel || "").trim();
+  if (sheet && !/sheet\)/i.test(out)) out = `${out} (${sheet} sheet)`;
+  return out;
+}
+
+/** Nominal inch label for a mesh sheet. 11.61" prints as 12". */
+export function nominalSheetLabel(raw: string): string | null {
+  const parsed = parseSizeLabel(raw);
+  if (!parsed || parsed.widthIn <= 0 || parsed.heightIn <= 0) return null;
+  const snap = (n: number) => {
+    const rounded = Math.round(n);
+    return Math.abs(n - rounded) <= 0.5 ? rounded : n;
+  };
+  return `${formatIn(snap(parsed.widthIn))}"x${formatIn(snap(parsed.heightIn))}"`;
 }
 
 function normKey(s: string): string {
   return s
     .toLowerCase()
+    .replace(/\([^)]*sheet\)/g, "")
     .replace(/[“”″"]/g, "")
     .replace(/\s+/g, "")
     .replace(/×/g, "x");

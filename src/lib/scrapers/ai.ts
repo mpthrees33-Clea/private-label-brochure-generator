@@ -26,7 +26,7 @@ Rules:
   * "mosaic" → mesh sheet of small tiles
   * "bullnose" → trim piece (e.g. 3"x12" bullnose, 3"x24" bullnose). Pull bullnose from the trim / "available trims" table, as its own size, not folded into the field size.
 - "isDeco" is true ONLY for the decorative variant of a field size (a grooved / textured deco that matches a color). Put the word "deco" in isDeco, not a second time in the label — label stays 24"x48" with isDeco true. A color named "Halo Ivory Deco" is NOT its own color: set decoImageUrl on Halo Ivory.
-- Ceramic wall tile (glossy, silk, matte subway) is still a full size chart. Record every field size and bullnose. If the page says wall / backsplash only, add a footnote "*ceramic wall tile — not for floors". DCOF / ANSI A326.3 listed as N/A means dcof is null — do not invent a wet DCOF for wall tile.
+- Ceramic wall tile (glossy, silk, matte subway) is still a full size chart. Record every field size and every bullnose or mosaic the page lists, not just the first one. A mesh-mounted mosaic keeps the chip size and the sheet size (4"x4" mosaic mounted on a 12"x12" sheet). If the page says wall / backsplash only, add a footnote "*ceramic wall tile — not for floors". DCOF / ANSI A326.3 listed as N/A means dcof is null — do not invent a wet DCOF for wall tile.
 - "availability" maps each color name → the size labels available in that color. Use the normalized inch labels (3"x12", and 3"x12" deco when isDeco). If a color is glossy-only, do not claim the matte finish for it. If unsure, list every size for every color.
 - "techSpecs" values must be SHORT and stripped of commentary. Match the Trinity reference brevity exactly. Use the printed units, no extra words. Examples (these are the only patterns; copy them):
   * thickness: "8mm" | "9mm" | "9.5mm" | "6mm - 9.5mm" | "9.5mm | 8.5mm"
@@ -38,7 +38,7 @@ Rules:
   * scratchHardness: "7" | "8" (single digit, no "Mohs" prefix)
   * breakingStrength: "≥ 450 lbf" | "≥ 250 lbs"
   * dcof: "≥ 0.42 wet" | "≥ 0.50 wet" | "matte ≥ 0.50 wet | grip ≥ 0.55 wet"
-  Use null for any spec not stated. NEVER add prose like "select sizes" or "(IW+)" — keep it terse.
+  Use null for any spec not printed in the source. "N/A", "Not Applicable", and a blank cell are null. Never copy specs from a different product or from a typical value for that tile type.
 - "finishLegend" is the GLOBAL set of finishes the collection offers (e.g. ["matte"] for a matte-only line, ["glossy", "matte"] for a wall tile, ["matte", "grip"] for matte indoor + grip outdoor). Defaults to ["matte"] if the page doesn't say. Use lowercase names. Recognized canonical names: "matte", "glossy", "silk", "polished", "grip", "textured", "3d", "3d plus". Map vendor synonyms (naturale → matte; lappato → polished; structured/non-slip → grip; brushed → textured). Keep "glossy" and "silk" as their own names on ceramic wall tile — do not collapse silk into matte.
 - "sizes[].finishes" is per-size — set it WHEN AND ONLY WHEN a specific size is restricted to a subset of the global finishLegend. Examples: a 20mm "paver" or "outdoor" size is typically grip only → ["grip"]; a "deco" size is typically textured only → ["textured"]; a "polished" or "lappato"-labeled size is polished only. Leave finishes UNSET for sizes that come in every finish the collection offers (the renderer falls back to the global legend). NEVER set finishes to all of finishLegend — that's redundant.
 - Be conservative — if data isn't on the page, set the field to null / empty array. Do not invent specs.
@@ -200,6 +200,7 @@ export async function scrapeWithAI(
   cleanedHtml: string,
   pageTitle: string,
   catalog?: PageCatalog | null,
+  pageHtml?: string,
 ): Promise<ScrapedProduct> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY is not set on the server.");
@@ -232,7 +233,7 @@ ${truncated}${truncatedNote}`,
       factory: factory?.display ?? new URL(url).host,
       factoryUrl: url,
     }),
-    { catalog, pageTitle, sourceText: cleanedHtml },
+    { catalog, pageTitle, sourceText: cleanedHtml, pageHtml: pageHtml || cleanedHtml },
   );
 }
 

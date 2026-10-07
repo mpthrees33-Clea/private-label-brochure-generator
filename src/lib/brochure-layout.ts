@@ -21,7 +21,8 @@ const MATRIX_ROW_H = 22;           // py-1 (8) + text 10 + border-b 1 + cushion
 const FOOTNOTES_MAX_H = 16;
 const SAFETY_BUFFER = 20;
 
-const SWATCH_LABEL_H = 22;     // mt-1 (4) + 11px text at line-height 1.5 (~16.5)
+const SWATCH_LABEL_H = 22;     // mt-1 (4) + one 11px line
+const SWATCH_LABEL_H_2 = 32;   // two wrapped lines, clamped so they cannot hit the chart
 const SWATCH_ROW_GAP = 8;      // gap between swatch rows (and field→deco)
 const SWATCH_GAP_X = 12;       // gap between swatches in a row
 const PAGE2_TOP = HEADER_H + BODY_TOP_GAP;
@@ -44,13 +45,16 @@ export interface SwatchLayout {
   /** Colors per primary row (last row may have fewer). */
   perRow: number;
   hasDeco: boolean;
+  /** Reserved caption height, including the 4px gap above the text. */
+  labelHeight: number;
 }
 
 export function swatchBlockHeight(layout: SwatchLayout): number {
   if (layout.width <= 0 || layout.perRow <= 0) return 0;
   const visualRows = layout.primaryRows * (layout.hasDeco ? 2 : 1);
+  const labelH = layout.labelHeight || SWATCH_LABEL_H;
   return (
-    visualRows * (layout.height + SWATCH_LABEL_H) +
+    visualRows * (layout.height + labelH) +
     Math.max(0, visualRows - 1) * SWATCH_ROW_GAP
   );
 }
@@ -69,12 +73,19 @@ export function sizeMatrixTop(layout: SwatchLayout): number {
 // single row would make the tiles too narrow (Bestow).
 const MAX_PRIMARY_ROWS = 3;
 
+/** How many caption lines a color name needs at this swatch width. Capped at 2. */
+export function swatchLabelLines(name: string, width: number): number {
+  const perLine = Math.max(1, Math.floor(width / 6.1));
+  return Math.min(2, Math.max(1, Math.ceil(name.trim().length / perLine)));
+}
+
 export function computeSwatchLayout(
   colorCount: number,
   hasDeco: boolean,
+  names: string[] = [],
 ): SwatchLayout {
   if (colorCount <= 0) {
-    return { width: 0, height: 0, primaryRows: 1, perRow: 0, hasDeco };
+    return { width: 0, height: 0, primaryRows: 1, perRow: 0, hasDeco, labelHeight: SWATCH_LABEL_H };
   }
 
   const sectionGaps = 2; // swatches→matrix, matrix→footnotes
@@ -90,48 +101,58 @@ export function computeSwatchLayout(
   const availV = PAGE_H - fixedV;
   const specsTop = PAGE_H - BOTTOM_BLOCK_H;
 
-  const candidates: SwatchLayout[] = [];
-  const seenRows = new Set<number>();
-  for (let requested = 1; requested <= MAX_PRIMARY_ROWS; requested++) {
-    const perRow = Math.ceil(colorCount / requested);
-    const primaryRows = Math.ceil(colorCount / perRow);
-    if (seenRows.has(primaryRows)) continue;
-    seenRows.add(primaryRows);
+  const pick = (labelHeight: number): SwatchLayout => {
+    const candidates: SwatchLayout[] = [];
+    const seenRows = new Set<number>();
+    for (let requested = 1; requested <= MAX_PRIMARY_ROWS; requested++) {
+      const perRow = Math.ceil(colorCount / requested);
+      const primaryRows = Math.ceil(colorCount / perRow);
+      if (seenRows.has(primaryRows)) continue;
+      seenRows.add(primaryRows);
 
-    const visualRows = primaryRows * (hasDeco ? 2 : 1);
-    const labelArea = visualRows * SWATCH_LABEL_H;
-    const rowGapTotal = Math.max(0, visualRows - 1) * SWATCH_ROW_GAP;
-    const availImagesV = Math.max(0, availV - labelArea - rowGapTotal);
-    const maxImageH = Math.floor(availImagesV / visualRows);
-    const maxImageW = Math.floor(
-      (CONTENT_W - SWATCH_GAP_X * Math.max(0, perRow - 1)) / perRow,
+      const visualRows = primaryRows * (hasDeco ? 2 : 1);
+      const labelArea = visualRows * labelHeight;
+      const rowGapTotal = Math.max(0, visualRows - 1) * SWATCH_ROW_GAP;
+      const availImagesV = Math.max(0, availV - labelArea - rowGapTotal);
+      const maxImageH = Math.floor(availImagesV / visualRows);
+      const maxImageW = Math.floor(
+        (CONTENT_W - SWATCH_GAP_X * Math.max(0, perRow - 1)) / perRow,
+      );
+      // Maintain 1:2 ratio — never distort.
+      const w = Math.max(0, Math.min(maxImageW, Math.floor(maxImageH / 2)));
+      candidates.push({
+        width: w,
+        height: w * 2,
+        primaryRows,
+        perRow,
+        hasDeco,
+        labelHeight,
+      });
+    }
+
+    const voidBelow = (layout: SwatchLayout) =>
+      specsTop - (sizeMatrixTop(layout) + sizeMatrixH + FOOTNOTES_MAX_H);
+
+    const usable = candidates.filter(
+      (layout) => layout.width >= MIN_SWATCH_W && voidBelow(layout) >= 8,
     );
-    // Maintain 1:2 ratio — never distort.
-    const w = Math.max(0, Math.min(maxImageW, Math.floor(maxImageH / 2)));
-    candidates.push({
-      width: w,
-      height: w * 2,
-      primaryRows,
-      perRow,
-      hasDeco,
-    });
-  }
+    const tight = usable.filter((layout) => voidBelow(layout) <= MAX_VOID_ABOVE_SPECS);
+    const pool = tight.length > 0 ? tight : usable.length > 0 ? usable : candidates;
+    pool.sort((a, b) => b.width - a.width || a.primaryRows - b.primaryRows);
+    return pool[0];
+  };
 
-  const voidBelow = (layout: SwatchLayout) =>
-    specsTop - (sizeMatrixTop(layout) + sizeMatrixH + FOOTNOTES_MAX_H);
-
-  const usable = candidates.filter(
-    (layout) => layout.width >= MIN_SWATCH_W && voidBelow(layout) >= 8,
-  );
-  const tight = usable.filter((layout) => voidBelow(layout) <= MAX_VOID_ABOVE_SPECS);
-  const pool = tight.length > 0 ? tight : usable.length > 0 ? usable : candidates;
-  pool.sort((a, b) => b.width - a.width || a.primaryRows - b.primaryRows);
-  return pool[0];
+  const single = pick(SWATCH_LABEL_H);
+  const wraps = names.some((name) => swatchLabelLines(name, single.width) > 1);
+  return wraps ? pick(SWATCH_LABEL_H_2) : single;
 }
 
 export function getSwatchLayout(data: BrochureData): SwatchLayout {
   const hasDeco = data.colors.some((c) => !!c.decoImageUrl && c.decoImageUrl.trim() !== "");
-  return computeSwatchLayout(data.colors.length, hasDeco);
+  const names = data.colors.map((color) =>
+    hasDeco && color.decoImageUrl ? `${color.trinityName} deco` : color.trinityName,
+  );
+  return computeSwatchLayout(data.colors.length, hasDeco, names);
 }
 
 /** Default page-relative coords for every draggable block. Page is which

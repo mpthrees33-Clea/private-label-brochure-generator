@@ -1,4 +1,10 @@
 import type { PageCatalog, CatalogGroup, CatalogSwatch } from "./catalog";
+import { extractListedFormats, type ListedFormat } from "./listed-sizes";
+import {
+  groundTechSpecs,
+  parseTechSpecs,
+  parseTechSpecsFromHtml,
+} from "./spec-parse";
 import {
   canonicalFinish,
   parseSizeLabel,
@@ -11,10 +17,13 @@ export interface FinalizeContext {
   catalog?: PageCatalog | null;
   pageTitle?: string;
   sourceText?: string;
+  /** Original page HTML. Sizes and specs are taken from this, not from the model, when it is present. */
+  pageHtml?: string;
 }
 
 const FINISH_ORDER = [
   "glossy",
+  "deep glaze",
   "silk",
   "matte",
   "polished",
@@ -50,6 +59,13 @@ export function finalizeScrapedProduct(
     next.colors = pairDecoColors(next.colors);
     repairImagesFromSwatches(next, catalog?.swatches ?? []);
   }
+
+  const pageHtml = ctx.pageHtml || (ctx.sourceText?.includes("<") ? ctx.sourceText : "");
+  if (pageHtml) {
+    applyListedFormats(next, extractListedFormats(pageHtml), Boolean(catalog && catalog.groups.length > 0));
+  }
+  collapseFinishVariants(next);
+  applyGroundedSpecs(next, pageHtml, sourceText);
 
   applyThicknessNotes(next, sourceText);
   clearUnratedDcof(next, sourceText);
@@ -489,6 +505,199 @@ function applyWallFootnote(product: ScrapedProduct, sourceText: string): void {
   if (!wallOnly) return;
   if (product.footnotes.some((f) => /wall|floor/i.test(f))) return;
   product.footnotes.push("*ceramic wall tile — not for floors");
+}
+
+function applyListedFormats(
+  product: ScrapedProduct,
+  listed: ListedFormat[],
+  fromCatalog: boolean,
+): void {
+  const rows = listed
+    .map((format) => {
+      const parsed = parseSizeLabel(format.raw);
+      if (!parsed) return null;
+      const size: ScrapedSize = {
+        label: parsed.label,
+        iconKind: parsed.iconKind,
+        isDeco: parsed.isDeco || undefined,
+        sheetLabel: parsed.piece === "mosaic" ? format.sheetRaw : undefined,
+        finishes: parsed.finish ? [parsed.finish] : undefined,
+      };
+      return size;
+    })
+    .filter((size): size is ScrapedSize => size != null);
+  if (rows.length === 0) return;
+
+  if (!fromCatalog) {
+    const allowed = new Set(rows.map(sizeKey));
+    product.sizes = product.sizes.filter((size) => allowed.has(sizeKey(size)));
+  }
+
+  for (const row of rows) {
+    const existing = product.sizes.find((size) => sizeKey(size) === sizeKey(row));
+    if (!existing) {
+      product.sizes.push(row);
+      const chart = sizeChartLabel(row);
+      const colorNames = new Set<string>([
+        ...product.colors.map((color) => color.name.toLowerCase()),
+        ...Object.keys(product.availability).map((name) => name.toLowerCase()),
+      ]);
+      for (const name of colorNames) {
+        const list = product.availability[name] ?? [];
+        if (!list.some((entry) => sizeChartLabel({ label: entry }) === chart || entry === chart)) {
+          product.availability[name] = [...list, chart];
+        }
+      }
+      continue;
+    }
+    if (!existing.sheetLabel && row.sheetLabel) existing.sheetLabel = row.sheetLabel;
+    if (existing.iconKind === "rectangle" && row.iconKind !== "rectangle") {
+      existing.iconKind = row.iconKind;
+    }
+  }
+}
+
+function sizeKey(size: { label: string; isDeco?: boolean | null }): string {
+  const parsed = parseSizeLabel(`${size.label}${size.isDeco ? " deco" : ""}`);
+  const label = parsed?.label ?? size.label.toLowerCase();
+  const deco = Boolean(size.isDeco) || Boolean(parsed?.isDeco);
+  return `${label}|${deco ? "d" : "f"}`;
+}
+
+const FINISH_SUFFIXES = [
+  "deep glaze",
+  "3d plus",
+  "semi-gloss",
+  "semi gloss",
+  "glossy",
+  "gloss",
+  "matte",
+  "matt",
+  "polished",
+  "textured",
+  "natural",
+  "silk",
+  "grip",
+  "honed",
+];
+
+function splitFinish(name: string): { stem: string; finish: string | null } {
+  const trimmed = name.trim();
+  for (const suffix of FINISH_SUFFIXES) {
+    const re = new RegExp(`(?:\\s+|[-–—])${suffix.replace(/\s+/g, "\\s+")}$`, "i");
+    if (!re.test(trimmed)) continue;
+    const stem = trimmed.replace(re, "").trim();
+    const finish = canonicalFinish(suffix);
+    if (stem.length >= 2 && finish) return { stem, finish };
+  }
+  return { stem: trimmed, finish: null };
+}
+
+function sizeLabelFromUrl(url: string): string | null {
+  const file = (url || "").split("?")[0];
+  const match = file.match(/(\d+(?:_\d{1,2})?)[x×](\d+(?:_\d{1,2})?)(?!\d)/i);
+  if (!match) return null;
+  const a = Number(match[1].replace("_", "."));
+  const b = Number(match[2].replace("_", "."));
+  if (!Number.isFinite(a) || !Number.isFinite(b) || Math.max(a, b) > 150) return null;
+  const parsed = parseSizeLabel(`${match[1].replace("_", ".")}x${match[2].replace("_", ".")}`);
+  return parsed && parsed.widthIn > 0 ? parsed.label : null;
+}
+
+function collapseFinishVariants(product: ScrapedProduct): void {
+  const parts = product.colors.map((color) => ({ color, ...splitFinish(color.name) }));
+  const groups = new Map<string, typeof parts>();
+  for (const part of parts) {
+    const key = part.stem.toLowerCase();
+    const list = groups.get(key) ?? [];
+    list.push(part);
+    groups.set(key, list);
+  }
+  const collapsing = [...groups.values()].filter((items) => {
+    const finishes = new Set(items.map((item) => item.finish).filter(Boolean));
+    return finishes.size >= 2;
+  });
+  if (collapsing.length === 0) return;
+
+  const globalFinishSizes = new Map<string, Set<string>>();
+  for (const part of parts) {
+    if (!part.finish) continue;
+    const label = sizeLabelFromUrl(part.color.imageUrl);
+    if (!label) continue;
+    const set = globalFinishSizes.get(part.finish) ?? new Set();
+    set.add(label);
+    globalFinishSizes.set(part.finish, set);
+  }
+
+  const colors: ScrapedColor[] = [];
+  const availability: Record<string, string[]> = { ...product.availability };
+  const availabilityFinishes: Record<string, Record<string, string[]>> = {
+    ...(product.availabilityFinishes ?? {}),
+  };
+  const legend = new Set<string>();
+
+  for (const items of groups.values()) {
+    const finishes = [...new Set(items.map((item) => item.finish).filter((f): f is string => !!f))];
+    if (finishes.length < 2) {
+      colors.push(...items.map((item) => item.color));
+      continue;
+    }
+    const stem = items[0].stem;
+    const swatch =
+      items.find((item) => sizeLabelFromUrl(item.color.imageUrl)) ??
+      items.find((item) => item.color.imageUrl) ??
+      items[0];
+    colors.push({
+      name: stem,
+      imageUrl: swatch.color.imageUrl,
+      decoImageUrl: items.map((item) => item.color.decoImageUrl).find(Boolean),
+    });
+    for (const finish of finishes) legend.add(finish);
+    for (const item of items) {
+      delete availability[item.color.name];
+      delete availability[item.color.name.toLowerCase()];
+    }
+
+    const finishSizes = globalFinishSizes;
+    const mapped = [...finishSizes.values()].some((set) => set.size > 0);
+    const labels: string[] = [];
+    const perSize: Record<string, string[]> = {};
+    for (const size of product.sizes) {
+      const chart = sizeChartLabel(size);
+      const offering = finishes.filter((finish) => {
+        const set = finishSizes.get(finish);
+        if (!mapped || !set || set.size === 0) return true;
+        return set.has(size.label) || set.has(chart);
+      });
+      if (offering.length === 0) continue;
+      labels.push(chart);
+      if (!sameSet(offering, finishes)) perSize[chart] = sortFinishes(offering);
+    }
+    availability[stem.toLowerCase()] = labels;
+    if (Object.keys(perSize).length > 0) availabilityFinishes[stem.toLowerCase()] = perSize;
+  }
+
+  product.colors = colors;
+  product.availability = availability;
+  product.availabilityFinishes =
+    Object.keys(availabilityFinishes).length > 0 ? availabilityFinishes : undefined;
+  if (legend.size > 0) product.finishLegend = sortFinishes([...legend]);
+}
+
+function applyGroundedSpecs(product: ScrapedProduct, pageHtml: string, sourceText: string): void {
+  const parsed = pageHtml ? parseTechSpecsFromHtml(pageHtml) : parseTechSpecs(sourceText);
+  const grounded = groundTechSpecs(product.techSpecs, `${pageHtml}\n${sourceText}`);
+  product.techSpecs = { ...grounded, ...stripEmpty(parsed) };
+}
+
+function stripEmpty(specs: Partial<ScrapedProduct["techSpecs"]>): Partial<ScrapedProduct["techSpecs"]> {
+  const out: Partial<ScrapedProduct["techSpecs"]> = {};
+  for (const [key, value] of Object.entries(specs)) {
+    if (value != null && String(value).trim() !== "") {
+      (out as Record<string, string>)[key] = value;
+    }
+  }
+  return out;
 }
 
 export function cleanImageUrl(url: string): string {

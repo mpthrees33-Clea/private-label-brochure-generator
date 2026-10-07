@@ -24,6 +24,7 @@ export function scrapedToBrochure(
       thickness: s.thickness ?? null,
       iconKind: s.iconKind,
       isDeco: s.isDeco ?? false,
+      sheetLabel: s.sheetLabel ?? null,
       footnoteRef: null,
       finishes: s.finishes,
     })),

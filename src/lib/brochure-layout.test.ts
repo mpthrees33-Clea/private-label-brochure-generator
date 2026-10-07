@@ -5,6 +5,7 @@ import {
   PAGE_H,
   computeSwatchLayout,
   sizeMatrixTop,
+  swatchLabelLines,
 } from "./brochure-layout";
 
 const SPECS_TOP = PAGE_H - BOTTOM_BLOCK_H;
@@ -42,6 +43,20 @@ describe("page 2 swatch stack", () => {
     assert.equal(computeSwatchLayout(5, true).primaryRows, 1);
     const gap = voidAboveSpecs(5, true);
     assert.ok(gap >= 8 && gap <= 96, `kendall-like void was ${gap}px`);
+  });
+
+  it("reserves a second caption line when a color name wraps", () => {
+    const longName = "au 02 lagoon deep glaze";
+    const longNames = Array.from({ length: 18 }, () => longName);
+    const wrapped = computeSwatchLayout(18, false, longNames);
+    const short = computeSwatchLayout(18, false, Array.from({ length: 18 }, () => "lagoon"));
+    assert.equal(computeSwatchLayout(4, false).labelHeight, 22);
+    assert.equal(short.labelHeight, 22);
+    assert.equal(swatchLabelLines("lagoon", short.width), 1);
+    assert.equal(wrapped.labelHeight, 32);
+    assert.equal(swatchLabelLines(longName, wrapped.width), 2);
+    assert.ok(sizeMatrixTop(wrapped) >= sizeMatrixTop(short));
+    assert.equal(wrapped.height, wrapped.width * 2);
   });
 
 });

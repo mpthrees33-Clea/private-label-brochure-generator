@@ -4,9 +4,15 @@ import { SizeIcon } from "./SizeIcon";
 import { FinishMarker } from "./FinishMarker";
 
 function headingLines(label: string): { primary: string; note: string | null } {
-  const match = label.match(/^(.*\S)\s+(bullnose|deco|mosaic)$/i);
-  if (!match) return { primary: label, note: null };
-  return { primary: match[1], note: match[2].toLowerCase() };
+  const sheet = label.match(/^(.*?)\s*(\([^)]*sheet\))\s*$/i);
+  const body = sheet ? sheet[1].trim() : label;
+  const sheetNote = sheet ? sheet[2] : null;
+  const match = body.match(/^(.*\S)\s+(bullnose|deco|mosaic)$/i);
+  if (!match && !sheetNote) return { primary: label, note: null };
+  if (!match) return { primary: body, note: sheetNote };
+  const qualifier = match[2].toLowerCase();
+  const note = sheetNote ? `${qualifier} ${sheetNote}` : qualifier;
+  return { primary: match[1], note };
 }
 
 export function SizeMatrix({
@@ -41,9 +47,10 @@ export function SizeMatrix({
             <th className={compact ? "w-[88px]" : "w-[18%]"} />
             {sizes.map((s, i) => {
               const label = sizeChartLabel(s);
-              const lines = compact
-                ? headingLines(label)
-                : { primary: label, note: null as string | null };
+              const lines =
+                compact || /sheet/i.test(label)
+                  ? headingLines(label)
+                  : { primary: label, note: null as string | null };
               return (
               <th
                 key={`${label}-${i}`}

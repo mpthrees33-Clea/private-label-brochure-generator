@@ -74,7 +74,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
         `Try the direct factory product URL or upload the PDF.`,
     );
   }
-  const product = await scrapeWithAI(url, page.cleanedHtml, page.title, catalog);
+  const product = await scrapeWithAI(url, page.cleanedHtml, page.title, catalog, html);
   await improveProductImages(product, catalog).catch((err) => {
     console.error("improveProductImages failed:", err);
   });
@@ -83,12 +83,11 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
   // product page itself. The full table lives on a linked "Technical
   // Data" / spec sheet / PDF brochure. Skip if Claude already pulled
   // a solid set on the first pass.
-  if (nonNullSpecCount(product.techSpecs) < 5) {
+  if (nonNullSpecCount(product.techSpecs) < 6) {
     try {
-      product.techSpecs = await enrichTechSpecs(
-        product.techSpecs,
-        page.anchors,
-      );
+      product.techSpecs = await enrichTechSpecs(product.techSpecs, page.anchors, {
+        pageUrl: url,
+      });
     } catch (err) {
       // Partial specs are better than failed scrape. Log and continue.
       console.error("enrichTechSpecs failed:", err);

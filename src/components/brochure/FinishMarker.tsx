@@ -20,6 +20,7 @@ const SHAPE_BY_FINISH: Record<string, FinishShape> = {
   lappato: "triangle",
   gloss: "triangle",
   glossy: "triangle",
+  "deep glaze": "circle-outline",
   "3d plus": "triangle",
   silk: "diamond",
   grip: "square",

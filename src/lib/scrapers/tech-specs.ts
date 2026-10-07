@@ -2,6 +2,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import * as cheerio from "cheerio";
 import type { TechSpecs } from "./types";
 import type { FetchedAnchor } from "./fetch";
+import {
+  parseTechSpecItems,
+  parseTechSpecsFromHtml,
+  groundTechSpecs,
+  type SpecTextItem,
+} from "./spec-parse";
 
 const SPEC_KEYWORDS = [
   "technical",
@@ -180,76 +186,189 @@ async function extractFromPdf(
   return tu.input as Partial<TechSpecs>;
 }
 
-async function extractFromHtml(
-  client: Anthropic,
-  url: string,
-  html: string,
-): Promise<Partial<TechSpecs> | null> {
-  const $ = cheerio.load(html);
-  $("script, style, noscript, nav, header, footer").remove();
-  const text = ($("body").text() || "").replace(/\s+/g, " ").trim().slice(0, 60_000);
-  if (!text) return null;
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    tools: [TOOL_SCHEMA as unknown as Anthropic.Tool],
-    tool_choice: { type: "tool", name: "extract_tech_specs" },
-    messages: [
-      {
-        role: "user",
-        content: `Spec page URL: ${url}\n\n${text}`,
-      },
-    ],
-  });
-  const tu = message.content.find((c) => c.type === "tool_use");
-  if (!tu || tu.type !== "tool_use") return null;
-  return tu.input as Partial<TechSpecs>;
-}
-
 /**
- * Run a deep tech-spec pass: follow likely spec-sheet links from the
- * factory product page, parse each (HTML or PDF), and merge results.
- * Stops early once enough specs are filled in.
+ * Follow spec sheets, sibling product pages, and a downloads index.
+ * Values come from the document text. The model only fills gaps, and
+ * only with numbers that appear in that document.
  */
 export async function enrichTechSpecs(
   initial: Partial<TechSpecs>,
   anchors: FetchedAnchor[],
+  opts?: { pageUrl?: string },
 ): Promise<Partial<TechSpecs>> {
-  if (!process.env.ANTHROPIC_API_KEY) return initial;
-  if (nonNullSpecCount(initial) >= 7) return initial; // already great
-  const candidates = findSpecSheetUrls(anchors);
-  if (candidates.length === 0) return initial;
-
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  if (nonNullSpecCount(initial) >= 6) return initial;
+  const token = opts?.pageUrl ? collectionToken(opts.pageUrl) : "";
+  const queue = discoverSpecUrls(anchors, opts?.pageUrl);
+  const seen = new Set(queue);
   let merged = initial;
+  let fetched = 0;
 
-  for (const c of candidates) {
+  while (queue.length > 0 && fetched < 6 && nonNullSpecCount(merged) < 6) {
+    const url = queue.shift()!;
+    fetched += 1;
     try {
-      const res = await fetchWithTimeout(c.url);
+      const res = await fetchWithTimeout(url);
       if (!res.ok) continue;
       const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
-      const isPdf =
-        contentType.includes("application/pdf") ||
-        c.url.toLowerCase().endsWith(".pdf");
-
-      let extracted: Partial<TechSpecs> | null = null;
+      const isPdf = contentType.includes("application/pdf") || /\.pdf($|\?)/i.test(url);
       if (isPdf) {
         const bytes = await res.arrayBuffer();
-        if (bytes.byteLength > MAX_PDF_BYTES) continue;
-        extracted = await extractFromPdf(client, bytes);
-      } else if (contentType.includes("text/html") || contentType === "") {
-        const html = await res.text();
-        extracted = await extractFromHtml(client, c.url, html);
+        if (bytes.byteLength === 0 || bytes.byteLength > MAX_PDF_BYTES) continue;
+        merged = fillEmpty(merged, await specsFromPdf(bytes));
+        continue;
       }
-      if (extracted) {
-        merged = mergeSpecs(merged, extracted);
-        if (nonNullSpecCount(merged) >= 8) break;
+      if (
+        !contentType.includes("text/html") &&
+        !contentType.includes("application/xhtml") &&
+        contentType !== ""
+      ) {
+        continue;
+      }
+      const html = await res.text();
+      merged = fillEmpty(merged, parseTechSpecsFromHtml(html));
+      if (nonNullSpecCount(merged) >= 4 || !token) continue;
+      for (const pdf of pdfLinks(html, url, token)) {
+        if (seen.has(pdf)) continue;
+        seen.add(pdf);
+        queue.push(pdf);
       }
     } catch {
-      // Skip noisy failures — partial specs are better than no scrape.
+      // Partial specs are better than a failed scrape.
     }
   }
-
   return merged;
+}
+
+function discoverSpecUrls(anchors: FetchedAnchor[], pageUrl?: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (url: string) => {
+    if (!url || seen.has(url) || isSkippableSpecUrl(url)) return;
+    seen.add(url);
+    out.push(url);
+  };
+  for (const candidate of findSpecSheetUrls(anchors)) push(candidate.url);
+  if (!pageUrl) return out;
+  const token = collectionToken(pageUrl);
+  const products = anchors.filter((anchor) => isSiblingProduct(anchor.url, pageUrl, token));
+  for (const anchor of products.slice(0, 2)) push(anchor.url);
+  const downloads = anchors.find((anchor) => isDownloadsIndex(anchor, pageUrl));
+  if (downloads) push(downloads.url);
+  return out;
+}
+
+function collectionToken(pageUrl: string): string {
+  try {
+    const parts = new URL(pageUrl).pathname.split("/").filter(Boolean);
+    const skip = new Set([
+      "product",
+      "products",
+      "produto",
+      "collections",
+      "collection",
+      "product-category",
+      "category",
+    ]);
+    return (
+      [...parts].reverse().find((part) => part.length >= 4 && !skip.has(part.toLowerCase()))?.toLowerCase() ??
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+function sameHost(a: string, b: string): boolean {
+  try {
+    const host = (url: string) => new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    return host(a) === host(b);
+  } catch {
+    return false;
+  }
+}
+
+function isSiblingProduct(url: string, pageUrl: string, token: string): boolean {
+  if (!token || !sameHost(url, pageUrl)) return false;
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    const pagePath = new URL(pageUrl).pathname.toLowerCase();
+    if (path === pagePath) return false;
+    if (!path.includes(token)) return false;
+    return /\/(products?|produto)\//.test(path);
+  } catch {
+    return false;
+  }
+}
+
+function isDownloadsIndex(anchor: FetchedAnchor, pageUrl: string): boolean {
+  if (!sameHost(anchor.url, pageUrl)) return false;
+  try {
+    const path = new URL(anchor.url).pathname.toLowerCase();
+    return /\/downloads?\/?$/.test(path) || /^downloads?$/.test(anchor.text.trim().toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function isSkippableSpecUrl(url: string): boolean {
+  return /drive\.google|docs\.google|accounts\.google/i.test(url);
+}
+
+function pdfLinks(html: string, pageUrl: string, token: string): string[] {
+  const $ = cheerio.load(html);
+  const out: string[] = [];
+  $("a[href]").each((_, el) => {
+    const href = $(el).attr("href") || "";
+    if (!/\.pdf($|\?)/i.test(href)) return;
+    const text = `${href} ${$(el).text() || ""}`.toLowerCase();
+    if (token && !text.includes(token)) return;
+    try {
+      out.push(new URL(href, pageUrl).toString());
+    } catch {
+      // ignore
+    }
+  });
+  return out.slice(0, 2);
+}
+
+function fillEmpty(base: Partial<TechSpecs>, next: Partial<TechSpecs>): Partial<TechSpecs> {
+  const out: Partial<TechSpecs> = { ...base };
+  for (const [key, value] of Object.entries(next)) {
+    if (value == null || String(value).trim() === "") continue;
+    if (!out[key as keyof TechSpecs]) (out as Record<string, string>)[key] = value;
+  }
+  return out;
+}
+
+async function specsFromPdf(bytes: ArrayBuffer): Promise<Partial<TechSpecs>> {
+  const items = await pdfItems(bytes);
+  const parsed = parseTechSpecItems(items);
+  if (nonNullSpecCount(parsed) > 0 || !process.env.ANTHROPIC_API_KEY) return parsed;
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const extracted = await extractFromPdf(client, bytes);
+  if (!extracted) return parsed;
+  return groundTechSpecs(extracted, items.map((item) => item.str).join(" "));
+}
+
+async function pdfItems(bytes: ArrayBuffer): Promise<SpecTextItem[]> {
+  const { extractTextItems, getDocumentProxy } = await import("unpdf");
+  const pdf = await getDocumentProxy(new Uint8Array(bytes));
+  const result = await extractTextItems(pdf);
+  const pages = Array.isArray(result) ? result : result.items;
+  const items: SpecTextItem[] = [];
+  for (const page of pages ?? []) {
+    const rows = Array.isArray(page) ? page : [page];
+    for (const item of rows) {
+      if (!item || typeof item !== "object" || !("str" in item)) continue;
+      const text = String(item.str || "");
+      if (!text.trim()) continue;
+      items.push({
+        str: text,
+        x: Number(item.x) || 0,
+        y: Number(item.y) || 0,
+        width: typeof item.width === "number" ? item.width : undefined,
+      });
+    }
+  }
+  return items;
 }

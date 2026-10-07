@@ -122,6 +122,7 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
           swatchWidth={swatch.width}
           swatchHeight={swatch.height}
           perRow={swatch.perRow}
+          labelHeight={swatch.labelHeight}
         />
       </Block>
       <Block id="sizeMatrix" pos={sizeMatrixPos}>

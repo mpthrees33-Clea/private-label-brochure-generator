@@ -12,11 +12,14 @@ export function ColorSwatchGrid({
   swatchWidth,
   swatchHeight,
   perRow,
+  labelHeight = 22,
 }: {
   colors: BrochureColor[];
   swatchWidth: number;
   swatchHeight: number;
   perRow: number;
+  /** Reserved caption box. Long names wrap inside it and cannot paint over the size chart. */
+  labelHeight?: number;
 }) {
   const hasDeco = colors.some((c) => c.decoImageUrl && c.decoImageUrl.trim());
   const chunks: BrochureColor[][] = [];
@@ -27,9 +30,20 @@ export function ColorSwatchGrid({
     <div style={{ display: "flex", flexDirection: "column", gap: `${ROW_GAP}px` }}>
       {chunks.map((row, idx) => (
         <div key={idx}>
-          <SwatchRow colors={row} swatchWidth={swatchWidth} swatchHeight={swatchHeight} />
+          <SwatchRow
+            colors={row}
+            swatchWidth={swatchWidth}
+            swatchHeight={swatchHeight}
+            labelHeight={labelHeight}
+          />
           {hasDeco && (
-            <SwatchRow colors={row} swatchWidth={swatchWidth} swatchHeight={swatchHeight} deco />
+            <SwatchRow
+              colors={row}
+              swatchWidth={swatchWidth}
+              swatchHeight={swatchHeight}
+              labelHeight={labelHeight}
+              deco
+            />
           )}
         </div>
       ))}
@@ -41,11 +55,13 @@ function SwatchRow({
   colors,
   swatchWidth,
   swatchHeight,
+  labelHeight,
   deco = false,
 }: {
   colors: BrochureColor[];
   swatchWidth: number;
   swatchHeight: number;
+  labelHeight: number;
   deco?: boolean;
 }) {
   return (
@@ -70,6 +86,7 @@ function SwatchRow({
           <div
             key={c.trinityName + (deco ? "-deco" : "")}
             className="flex flex-col"
+            style={{ width: swatchWidth }}
           >
             <div
               className="aspect-[1/2] overflow-hidden bg-[#f3f3f3]"
@@ -87,7 +104,17 @@ function SwatchRow({
                 />
               ) : null}
             </div>
-            <span className="mt-1 text-[11px] lowercase text-brochure-gray">
+            <span
+              className="lowercase text-brochure-gray"
+              style={{
+                display: "block",
+                marginTop: 4,
+                fontSize: 11,
+                lineHeight: 1.15,
+                maxHeight: Math.max(12, labelHeight - 4),
+                overflow: "hidden",
+              }}
+            >
               {label}
             </span>
           </div>

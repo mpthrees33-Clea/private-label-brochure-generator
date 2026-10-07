@@ -17,6 +17,8 @@ export interface BrochureSize {
   thickness?: string | null; // e.g. '8.5mm'
   iconKind: SizeIcon;
   isDeco?: boolean;
+  /** Nominal mesh sheet, e.g. 12"x12", printed after a mosaic chip. */
+  sheetLabel?: string | null;
   footnoteRef?: string | null;
   /** Finishes this size column comes in. Overrides the global
    *  finishLegend for chart-marker rendering when set. Used when a
