@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { Brochure } from "@/components/brochure/Brochure";
 import type { BrochureData } from "@/lib/brochure-types";
 import { BROCHURE_PRINT_CSS } from "./brochure-print-css";
-import { inlineBrochureImages } from "./inline-images";
+import { findBlankInlinedImages, inlineBrochureImages } from "./inline-images";
 import { renderMarkup } from "./render-markup";
 
 // Full HTML document for headless Chromium. Images are data URIs and
@@ -16,5 +16,12 @@ export async function buildBrochureDocument(
 ): Promise<string> {
   const body = await renderMarkup(createElement(Brochure, { data, factoryName }));
   const inlined = await inlineBrochureImages(body);
+  const blanks = await findBlankInlinedImages(inlined);
+  if (blanks.length > 0) {
+    console.error(`brochure refused blank photos: ${blanks.join(", ")}`);
+    throw new Error(
+      `Brochure photos did not inline (${blanks.join(", ")}). Refusing to build a PDF with blank image slots.`,
+    );
+  }
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><style>${BROCHURE_PRINT_CSS}</style></head><body>${inlined}</body></html>`;
 }

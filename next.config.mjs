@@ -21,7 +21,14 @@ const nextConfig = {
   // HTML. Vercel does not put `public/` on the function filesystem
   // unless it is traced.
   outputFileTracingIncludes: {
-    "/api/brochure/pdf": ["./public/brand/**/*", "./public/sample/**/*"],
+    "/api/brochure/pdf": [
+      "./public/brand/**/*",
+      "./public/sample/**/*",
+      // sharp 0.35's libvips .so is a sibling package. Turbopack's file
+      // tracer misses it, and WebP photos then fail to transcode.
+      "./node_modules/@img/sharp-libvips-linux-x64/**/*",
+      "./node_modules/@img/sharp-linux-x64/**/*",
+    ],
   },
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**" }],
