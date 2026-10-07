@@ -78,9 +78,14 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
   // a solid set on the first pass.
   if (nonNullSpecCount(product.techSpecs) < 6) {
     try {
-      product.techSpecs = await enrichTechSpecs(product.techSpecs, page.anchors, {
+      const enriched = await enrichTechSpecs(product.techSpecs, page.anchors, {
         pageUrl: url,
+        standards: product.specStandards,
+        sources: product.specSources,
       });
+      product.techSpecs = enriched.specs;
+      product.specStandards = enriched.standards;
+      product.specSources = enriched.sources;
     } catch (err) {
       // Partial specs are better than failed scrape. Log and continue.
       console.error("enrichTechSpecs failed:", err);

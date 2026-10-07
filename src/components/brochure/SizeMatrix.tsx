@@ -7,7 +7,7 @@ function headingLines(label: string): { primary: string; note: string | null } {
   const sheet = label.match(/^(.*?)\s*(\([^)]*sheet\))\s*$/i);
   const body = sheet ? sheet[1].trim() : label;
   const sheetNote = sheet ? sheet[2] : null;
-  const match = body.match(/^(.*\S)\s+(bullnose|deco|mosaic)$/i);
+  const match = body.match(/^(.*\S)\s+(bullnose|covebase|deco|mosaic|base|scalino|stripe|corner)$/i);
   if (!match && !sheetNote) return { primary: label, note: null };
   if (!match) return { primary: body, note: sheetNote };
   const qualifier = match[2].toLowerCase();

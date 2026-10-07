@@ -4,7 +4,8 @@ import { renderBrochurePdf } from "@/lib/pdf/render";
 import type { BrochureData } from "@/lib/brochure-types";
 import { scrapeProduct } from "@/lib/scrapers";
 import { scrapedToBrochure } from "@/lib/scraped-to-brochure";
-import { findByFactoryUrl, getProduct } from "@/lib/store/products";
+import { findByFactoryUrl, getProduct, listProducts } from "@/lib/store/products";
+import { chooseTrinityName } from "@/lib/trinity-names";
 import { withFactoryLayoutDefaults } from "@/lib/store/factory-layout-defaults";
 import {
   missingBrochureFields,
@@ -76,9 +77,8 @@ async function resolveBrochure(
     if (existing) return renderSaved(existing);
     const scraped = await scrapeProduct(factoryUrl);
     const data = scrapedToBrochure(scraped);
-    if (!data.trinityName || data.trinityName.trim() === "") {
-      data.trinityName = "rename-me";
-    }
+    const taken = (await listProducts()).map((product) => product.trinityName);
+    data.trinityName = chooseTrinityName(data.trinityName, taken);
     let filename = "brochure.pdf";
     try {
       filename = safeFilename(new URL(factoryUrl).hostname.replace(/\./g, "-") + ".pdf");

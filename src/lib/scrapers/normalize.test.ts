@@ -498,3 +498,81 @@ describe("metric wall sizes", () => {
     assert.equal(product.sizes[0].iconKind, "rectangle");
   });
 });
+
+describe("trims and shared mosaics", () => {
+  it("puts base trims and stripe on a line and keeps the field size", () => {
+    const html = `<h1>Moon</h1>
+      <p>120x120 /48"x48" 60x120 /24"x48" R</p>
+      <p>Battiscopa 9mm 7x80 /2 7/8"x32" 7x60 /2 7/8"x24" 3D Wall STRIPE 60x120 /24"x48"</p>`;
+    const product = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Moon",
+        suggestedTrinityName: "keene",
+        colors: [{ name: "Eclipse", imageUrl: "https://cdn.example/eclipse.jpg" }],
+        sizes: [{ label: '24"x48"', iconKind: "rectangle" }],
+        availability: { Eclipse: ['24"x48"'] },
+      }),
+      { pageHtml: html, pageTitle: "Moon", sourceText: "Moon tile" },
+    );
+    const labels = product.sizes.map((size) => size.label);
+    assert.ok(labels.includes('24"x48"'));
+    assert.equal(labels.some((label) => /base/.test(label)), false);
+    assert.ok(product.specialPieces?.some((piece) => /base/.test(piece) && /32/.test(piece)));
+    assert.ok(product.specialPieces?.some((piece) => /base/.test(piece) && /24/.test(piece)));
+    assert.ok(product.specialPieces?.some((piece) => /stripe/.test(piece) && /24/.test(piece) && /48/.test(piece)));
+  });
+
+  it("checks both mosaics for every color when the count matches", () => {
+    const html = `<p>Decors 2"x2" Mosaic (4) 2"x6.5" Stretch Mosaic (4) SILK JUTE WOOL LEATHER
+      Trim pieces 3" x 24" Bullnose 6"x12" Covebase</p>`;
+    const product = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Bond",
+        suggestedTrinityName: "keene",
+        colors: [
+          { name: "Silk", imageUrl: "https://cdn.example/silk.jpg" },
+          { name: "Jute", imageUrl: "https://cdn.example/jute.jpg" },
+          { name: "Wool", imageUrl: "https://cdn.example/wool.jpg" },
+          { name: "Leather", imageUrl: "https://cdn.example/leather.jpg" },
+        ],
+        sizes: [
+          { label: '2"x2" mosaic', iconKind: "mosaic" },
+          { label: '2"x6.5" mosaic', iconKind: "mosaic" },
+        ],
+        availability: {
+          Silk: ['2"x2" mosaic', '2"x6.5" mosaic'],
+          Jute: ['2"x6.5" mosaic'],
+          Wool: ['2"x2" mosaic', '2"x6.5" mosaic'],
+          Leather: ['2"x2" mosaic', '2"x6.5" mosaic'],
+        },
+      }),
+      { pageHtml: html, pageTitle: "Bond", sourceText: "Bond porcelain" },
+    );
+    assert.ok(product.availability.jute?.some((label) => label.includes('2"x2"')));
+    assert.ok(product.sizes.some((size) => /bullnose/.test(size.label)));
+    assert.ok(product.sizes.some((size) => /covebase/.test(size.label)));
+  });
+
+  it("keeps printed base inches and puts a following trim name on the line", () => {
+    const html = `<h1>Moon</h1><p>Battiscopa 9mm 7x80 /2 ⅞&rdquo;x32&rdquo; 7x60 /2 ⅞&rdquo;x24&rdquo;</p>
+      <p>Trim pieces 33x60 cm 13&quot; x 23 5/8&quot; Scalino 7,2x60 cm 2 13/16&quot; x 23 5/8&quot; Battiscopa
+      30x30 cm 12&quot; x 12&quot; Deco Composizione N (6) 3D Hexagons (6)</p>`;
+    const product = finalizeScrapedProduct(
+      emptyProduct({
+        factoryName: "Alchemy",
+        suggestedTrinityName: "keene",
+        colors: [{ name: "Navy", imageUrl: "https://cdn.example/navy.jpg" }],
+        sizes: [{ label: '24"x48"', iconKind: "rectangle" }],
+        availability: { Navy: ['24"x48"'] },
+      }),
+      { pageHtml: html, pageTitle: "Alchemy", sourceText: "Alchemy tile" },
+    );
+    const pieces = product.specialPieces ?? [];
+    assert.ok(pieces.some((piece) => /2 7\/8"x32" base/.test(piece)));
+    assert.ok(pieces.some((piece) => /scalino/.test(piece) && /23/.test(piece)));
+    assert.ok(pieces.some((piece) => /12"x12" deco/.test(piece)));
+    assert.ok(pieces.some((piece) => /Composizione N/.test(piece)));
+    assert.ok(pieces.some((piece) => /3D Hexagons/.test(piece)));
+    assert.equal(product.sizes.some((size) => /scalino|base|deco/.test(size.label)), false);
+  });
+});

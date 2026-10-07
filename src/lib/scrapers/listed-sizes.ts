@@ -15,7 +15,7 @@ export interface ListedFormat {
 }
 
 const SIZE_RE = new RegExp(
-  `(\\d+(?:[._]\\d{1,2})?)\\s*${INCH_MARK}?\\s*[x×]\\s*(\\d+(?:[._]\\d{1,2})?)\\s*${INCH_MARK}?\\s*(cm|mm)?`,
+  `(\\d+(?:\\s+\\d+\\s*\\/\\s*\\d+|[.,_]\\d{1,2})?)\\s*${INCH_MARK}?\\s*[x×]\\s*(\\d+(?:\\s+\\d+\\s*\\/\\s*\\d+|[.,_]\\d{1,2})?)\\s*${INCH_MARK}?\\s*(cm|mm)?`,
   "gi",
 );
 
@@ -23,7 +23,7 @@ const LISTING_CUE =
   /\b(format|sizes?|available|nominal|bullnose|pencil|mosaic|trapezoid|deco|chevron|paver|field|sheet)\b/i;
 
 export function extractListedFormats(html: string): ListedFormat[] {
-  const $ = cheerio.load(html);
+  const $ = cheerio.load(html.replace(/></g, "> <"));
   const words = collectionWords($);
   $(
     "script, style, noscript, svg, nav, header, footer, aside, " +
@@ -32,6 +32,7 @@ export function extractListedFormats(html: string): ListedFormat[] {
   ).remove();
   // Theme stylesheets put "blog-layout" on <body>. That is not a blog post,
   // and removing it deletes the product tables with it.
+  $("[class*='menu-item']").remove();
   $("[class*='blog'], [class*='news'], [class*='announcement']").each((_, el) => {
     if (el.type !== "tag") return;
     const tag = el.tagName.toLowerCase();
@@ -68,23 +69,25 @@ export function extractListedFormats(html: string): ListedFormat[] {
       if ($(el).closest("table").length) return;
       if (skipForeignSize($, el, words)) return;
       const text = ($(el).text() || "").replace(/\s+/g, " ").trim();
-      if (!text || text.length > 180) return;
+      if (!text || text.length > 500) return;
       if (/\bsample\b/i.test(text)) return;
       if (/\bchip\b/i.test(text) && !/\bchip\s*size\b/i.test(text)) return;
       if (/\bnow available\b|\bread\b/i.test(text)) return;
       // A comma-separated size line is a list even when it is longer than
       // one label. A sentence that merely mentions a format ("the large
-      // 120x120 format") is not.
+      // 120x120 format") is not. A long color line can still print real
+      // inch sizes ("24\"x48\" ... SILK JUTE").
       const leftoverWords = text
         .replace(new RegExp(SIZE_RE.source, "gi"), " ")
         .replace(/[^a-z0-9]+/gi, " ")
         .trim()
         .split(/\s+/)
         .filter(Boolean);
-      if (leftoverWords.length > 6) return;
+      const strict = leftoverWords.length > 6 || text.length > 180;
       const sizeList = leftoverWords.length <= 2;
-      if (!sizeList && text.length > 40 && !LISTING_CUE.test(text)) return;
+      if (!strict && !sizeList && text.length > 40 && !LISTING_CUE.test(text)) return;
       for (const format of formatsInText(text)) {
+        if (strict && !/["”″′'’]|(?:bullnose|mosaic|covebase|deco)\b/i.test(format.raw)) continue;
         if (format.sheetRaw) {
           sheetKeys.add(dimKey(format.sheetRaw));
           continue;
@@ -100,6 +103,14 @@ export function extractListedFormats(html: string): ListedFormat[] {
     const src = $(el).attr("src") || $(el).attr("data-src") || "";
     const alt = $(el).attr("alt") || "";
     if (/room|bath|hero|slider|lifestyle|ambient|logo|icon/i.test(`${src} ${alt}`)) return;
+    // A photo of a named special (3D hexagon, battiscopa) is not a new chart size.
+    if (/\b(hexagons?|battiscopa|scalino|angolare|composizione)\b/i.test(`${src} ${alt}`)) return;
+    // A related-collection photo ("Prestigio_75x150") is not this collection's chart.
+    if (words.length) {
+      const href = $(el).closest("a").attr("href") || "";
+      const blob = `${src} ${alt} ${href}`.toLowerCase();
+      if (!words.some((word) => blob.includes(word))) return;
+    }
     const fromName = formatFromFilename(src);
     if (fromName) found.push(fromName);
   });
@@ -167,6 +178,12 @@ function formatsFromTable(
 
   const pieces = pieceRows(rows);
   out.push(...pieces);
+  // Colour | 24"x48" | 24" x 24" — the formats are the column titles.
+  for (const cell of rows[0] ?? []) {
+    if (!dimKey(cell)) continue;
+    if (!/["”″′'’]|cm|mm/i.test(cell)) continue;
+    out.push({ raw: cell });
+  }
   out.push(...labeledSizeCells(rows));
 
   const headers = rows[0].map((cell) => cell.toLowerCase().trim());

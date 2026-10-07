@@ -44,4 +44,15 @@ describe("tech spec headers", () => {
     const dcof = eclipta.find((c) => c.key === "dcof");
     assert.equal(dcof?.header, "dynamic coefficient of friction (ANSI A326.3)");
   });
+
+  it("prints the standard the factory cited instead of the ASTM template", () => {
+    const columns = visibleTechSpecColumns(
+      { frostResistance: "resistant", waterAbsorption: "≤ 0.5%" },
+      { frostResistance: "UNI EN ISO 10545.12", waterAbsorption: "ISO 10545-3" },
+    );
+    const headers = columns.map((column) => column.header);
+    assert.ok(headers.includes("frost resistance (UNI EN ISO 10545.12)"));
+    assert.ok(headers.includes("water absorption (ISO 10545-3)"));
+    assert.equal(headers.some((header) => /ASTM/.test(header)), false);
+  });
 });

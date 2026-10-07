@@ -73,7 +73,36 @@ export function canonicalFinish(raw: string | null | undefined): string | null {
 }
 
 export function parseSizeLabel(raw: string): ParsedSize | null {
-  const text = raw.replace(/\s+/g, " ").trim();
+  const text = raw
+    .replace(/(\d),(\d{1,2})(?!\d)/g, "$1.$2")
+    .replace(/(\d)\s*([½⅓¼¾⅛⅜⅝⅞])/g, (_, digit, ch) => {
+      const map: Record<string, string> = {
+        "½": "1/2",
+        "⅓": "1/3",
+        "¼": "1/4",
+        "¾": "3/4",
+        "⅛": "1/8",
+        "⅜": "3/8",
+        "⅝": "5/8",
+        "⅞": "7/8",
+      };
+      return `${digit} ${map[ch] ?? ch}`;
+    })
+    .replace(/[½⅓¼¾⅛⅜⅝⅞]/g, (ch) => {
+      const map: Record<string, string> = {
+        "½": "1/2",
+        "⅓": "1/3",
+        "¼": "1/4",
+        "¾": "3/4",
+        "⅛": "1/8",
+        "⅜": "3/8",
+        "⅝": "5/8",
+        "⅞": "7/8",
+      };
+      return map[ch] ?? ch;
+    })
+    .replace(/\s+/g, " ")
+    .trim();
   if (!text) return null;
 
   const stated = printedInchPair(text);
@@ -178,6 +207,7 @@ function finishSize(
 }
 
 function pieceSuffix(text: string, piece: ParsedSize["piece"]): string {
+  if (/\bcove\s*base\b|\bcovebase\b/i.test(text)) return " covebase";
   if (piece === "bullnose") return " bullnose";
   if (/\bbasket\s*weave\b|\bbasketweave\b/i.test(text)) return " basketweave";
   if (/\barch\s+mosaic\b/i.test(text)) return " arch mosaic";
@@ -335,7 +365,7 @@ export function dropNominalTwins<T extends ParsedSize>(rows: T[]): T[] {
     Math.abs(a.widthIn - b.widthIn) <= tol && Math.abs(a.heightIn - b.heightIn) <= tol;
   const keptMetric = rows.filter((row) => {
     if (!row.fromMetric) return true;
-    const stated = rows.find((other) => other.statedInches && close(row, other, 0.35));
+    const stated = rows.find((other) => other.statedInches && close(row, other, 0.55));
     if (!stated) return true;
     return close(row, stated, 0.1);
   });

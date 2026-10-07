@@ -52,9 +52,6 @@ export async function POST(req: NextRequest) {
   try {
     const scraped = await scrapeFromPdfWithAI(bytes, f.name);
     const data = scrapedToBrochure(scraped);
-    if (!data.trinityName || data.trinityName.trim() === "") {
-      data.trinityName = "rename-me";
-    }
     const created = await createProduct({
       ...data,
       factory: scraped.factory,

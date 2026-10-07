@@ -6,8 +6,16 @@ import { visibleTechSpecColumns } from "@/lib/tech-spec-columns";
 // cannot squeeze other columns out of the row. The test method lives in
 // the gray header ("water absorption (ASTM C373)"), and there is a
 // single values row. Thickness and shade variation have no standard.
-export function TechSpecsTable({ specs }: { specs: Partial<TechSpecs> }) {
-  const cols = visibleTechSpecColumns(specs);
+export function TechSpecsTable({
+  specs,
+  standards,
+  sources,
+}: {
+  specs: Partial<TechSpecs>;
+  standards?: Partial<Record<keyof TechSpecs, string>> | null;
+  sources?: Partial<Record<keyof TechSpecs, string>> | null;
+}) {
+  const cols = visibleTechSpecColumns(specs, standards);
   if (cols.length === 0) return null;
   return (
     <div className="overflow-hidden">
@@ -38,7 +46,7 @@ export function TechSpecsTable({ specs }: { specs: Partial<TechSpecs> }) {
         <tbody>
           <tr className="text-brochure-gray">
             {cols.map((c) => (
-              <td key={c.key} className="px-1 py-1 align-top break-words">
+              <td key={c.key} className="px-1 py-1 align-top break-words" title={sources?.[c.key] || undefined}>
                 {specs[c.key]}
               </td>
             ))}

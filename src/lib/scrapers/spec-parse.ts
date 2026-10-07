@@ -17,21 +17,31 @@ const LABEL_RULES: { key: keyof TechSpecs; re: RegExp }[] = [
   { key: "breakingStrength", re: /break(?:ing)?\s*strength/i },
   { key: "scratchHardness", re: /scratch\s*hardness|mohs(?:\s*hardness)?|moh['’]?s?\s*scale/i },
   { key: "chemicalResistance", re: /chemical\s*resist/i },
-  { key: "shadeVariation", re: /(?:shade(?:\s*and\s*texture)?|color)\s*(?:variation|rating)|\bvariation\b/i },
-  { key: "frostResistance", re: /frost\s*(?:resist|proof)|freeze\s*resist/i },
+  { key: "shadeVariation", re: /(?:shade(?:\s*and\s*texture)?|colou?r)\s*(?:variation|rating)|\bvariation\s*:/i },
+  { key: "frostResistance", re: /frost\s*(?:resist|proof)|freeze\s*(?:resist|thaw)/i },
   { key: "stainResistance", re: /stain\s*resist/i },
   { key: "dcof", re: /d\.?\s*c\.?\s*o\.?\s*f|dynamic\s*coefficient|slip\s*resist/i },
-  { key: "thickness", re: /\bthickness\b/i },
+  { key: "thickness", re: /\bthickness\b|\bspessore\b/i },
 ];
+
+export interface ParsedSpecRecord {
+  specs: Partial<TechSpecs>;
+  standards: Partial<Record<keyof TechSpecs, string>>;
+}
 
 export function parseTechSpecs(text: string): Partial<TechSpecs> {
   return parseTechSpecsFromHtml(`<body><p>${escapeHtml(text)}</p></body>`);
 }
 
 export function parseTechSpecsFromHtml(html: string): Partial<TechSpecs> {
-  const $ = cheerio.load(html);
+  return parseTechSpecsDetailed(html).specs;
+}
+
+export function parseTechSpecsDetailed(html: string): ParsedSpecRecord {
+  const $ = cheerio.load(html.replace(/></g, "> <"));
   $("script, style, noscript, nav, header, footer").remove();
   const specs: Partial<TechSpecs> = {};
+  const standards: Partial<Record<keyof TechSpecs, string>> = {};
   const pairValues: Partial<Record<keyof TechSpecs, string[]>> = {};
 
   // A product spec is a label sitting next to one value. A row of several
@@ -48,8 +58,10 @@ export function parseTechSpecsFromHtml(html: string): Partial<TechSpecs> {
     if (texts.length < 2 || texts.some((part) => part.length > 80)) return;
     const key = labelKey(texts[0]);
     if (!key) return;
+    if (isRequirement(texts.slice(1).join(" "))) return;
     const value = valueFor(key, texts.slice(1).join(" "), texts[0]);
     if (!value) return;
+    rememberStandard(standards, key, texts.join(" "));
     const list = pairValues[key] ?? [];
     list.push(value);
     pairValues[key] = list;
@@ -83,17 +95,15 @@ export function parseTechSpecsFromHtml(html: string): Partial<TechSpecs> {
               label,
             );
         if (!value) return;
+        rememberStandard(standards, key, `${label} ${cells.join(" ")}`);
         const list = found.get(key) ?? [];
         list.push(value);
         found.set(key, list);
       });
     for (const [key, values] of found) {
       if (specs[key]) continue;
-      const uniqueValues = unique(values);
-      // Several different numbers for one property is a comparison chart
-      // (6mm vs 2cm, required vs another body), not this product.
-      if (uniqueValues.length > 1) continue;
-      specs[key] = uniqueValues[0];
+      const merged = mergeRowValues(key, values);
+      if (merged) specs[key] = merged;
     }
   });
 
@@ -102,16 +112,10 @@ export function parseTechSpecsFromHtml(html: string): Partial<TechSpecs> {
   for (const key of Object.keys(windows) as (keyof TechSpecs)[]) {
     if (!specs[key] && windows[key]) specs[key] = windows[key];
   }
-  const slip = flat.match(/slip\s*resistance[^.]{0,24}\b(r\s*\d{1,2})\b/i);
-  if (slip) {
-    const rating = slip[1].replace(/\s+/g, "").toUpperCase();
-    if (specs.dcof && !specs.dcof.toUpperCase().includes(rating)) {
-      specs.dcof = `${specs.dcof} · ${rating}`;
-    } else if (!specs.dcof) {
-      specs.dcof = rating;
-    }
-  }
-  return specs;
+  applyFeatureLines(flat, specs, standards);
+  applyClassRun(flat, specs);
+  appendSlipRatings(flat, specs);
+  return { specs, standards };
 }
 
 function dominant(values: string[]): string | null {
@@ -131,12 +135,52 @@ function dominant(values: string[]): string | null {
 }
 
 export function parseTechSpecItems(items: SpecTextItem[]): Partial<TechSpecs> {
+  return parseTechSpecItemsDetailed(items).specs;
+}
+
+export function parseTechSpecItemsDetailed(items: SpecTextItem[]): ParsedSpecRecord {
   const usable = items.filter((item) => item.str && item.str.trim());
   const specs: Partial<TechSpecs> = {};
+  const standards: Partial<Record<keyof TechSpecs, string>> = {};
   Object.assign(specs, specsFromRows(cluster(usable, "y", 5)));
   Object.assign(specs, specsNearLabels(usable));
   Object.assign(specs, thicknessContinuation(usable));
-  return specs;
+  if (!specs.thickness) {
+    const packed = usable
+      .map((item) => item.str.trim())
+      .filter((str) => /^\d+(?:[.,]\d+)?\s*mm$/i.test(str));
+    const chosen = dominant(thicknessReadings(packed.join(" ")));
+    if (chosen) specs.thickness = chosen;
+  }
+  const blob = usable.map((item) => item.str).join(" ");
+  for (const key of Object.keys(specs) as (keyof TechSpecs)[]) {
+    const near = standardNear(key, blob) ?? standardBesideValue(key, blob, String(specs[key] ?? ""));
+    if (near) standards[key] = near;
+  }
+  applyFeatureLines(blob, specs, standards);
+  applyClassRun(blob, specs);
+  appendSlipRatings(blob, specs);
+  return { specs, standards };
+}
+
+function applyClassRun(blob: string, specs: Partial<TechSpecs>): void {
+  const chemical = classRun(blob, /chemical\s*resist/i);
+  if (chemical) specs.chemicalResistance = chemical;
+  const stain = classRun(blob, /stain(?:ing)?\s*resist|resist\w*\s+to\s+stain/i);
+  if (stain) specs.stainResistance = stain;
+}
+
+function classRun(blob: string, label: RegExp): string | null {
+  const at = blob.search(label);
+  if (at < 0) return null;
+  const window = blob.slice(at, at + 500);
+  const run = window.match(
+    /\b(A|LA|HA|GA|GB|GHA)\b(?:\s*(?:\||\s)\s*\b(A|LA|HA|GA|GB|GHA)\b)+/i,
+  );
+  if (!run) return null;
+  const tokens = unique(run[0].split(/[|\s]+/).map((part) => part.trim().toLowerCase()).filter(Boolean));
+  if (tokens.length < 2 || tokens.length > 3) return null;
+  return `class ${tokens.join(" / ")}`;
 }
 
 /** Drop a model-written spec unless its number or word is in the source. */
@@ -169,20 +213,15 @@ function windowsFromText(flat: string): Partial<TechSpecs> {
   if (!flat) return specs;
   const readings: string[] = [];
   const inchReadings: string[] = [];
-  const thickRe = /thickness(?:\s*\(\s*mm\s*\))?.{0,40}/gi;
+  const thickRe = /(?:thickness|spessore)(?:\s*\(\s*mm\s*\))?.{0,48}/gi;
   let thick: RegExpExecArray | null;
   while ((thick = thickRe.exec(flat))) {
     const window = thick[0];
-    const after = window.match(/(\d+(?:[.,]\d+)?)\s*mm(\s*\([^)]*\))?/i);
-    const before = window.match(/\bmm\s*(\d+(?:[.,]\d+)?)(\s*\([^)]*\))?/i);
-    const chosen = after ?? before;
-    if (chosen && isPerSizeNote(chosen[2] || "")) continue;
-    if (chosen) readings.push(formatMm(chosen[1]));
-    else if (/\(\s*mm\s*\)/i.test(window)) {
-      const bare = window.match(/thickness(?:\s*\(\s*mm\s*\))?\s*[:\s]*(\d+(?:[.,]\d+)?)/i);
-      if (bare) readings.push(formatMm(bare[1]));
-    } else {
-      const inches = window.match(/thickness\s*:?\s*(0\.\d{1,3})\b(?!\s*mm)/i);
+    const noted = window.match(/(\d+(?:[.,]\d+)?)\s*mm(\s*\([^)]*\))?/i);
+    if (noted && isPerSizeNote(noted[2] || "")) continue;
+    readings.push(...thicknessReadings(window));
+    if (readings.length === 0) {
+      const inches = window.match(/(?:thickness|spessore)\s*:?\s*(0\.\d{1,3})\b(?!\s*mm)/i);
       if (inches) inchReadings.push(`${inches[1]}"`);
     }
   }
@@ -272,7 +311,20 @@ function specsNearLabels(items: SpecTextItem[]): Partial<TechSpecs> {
       key === "chemicalResistance" || key === "stainResistance" || key === "frostResistance"
         ? valueFor(key, joined, labelText)
         : bestOf(key, splitCells(values), labelText);
-    if (value) specs[key] = value;
+    const fromLabel = key === "dcof" ? valueFor("dcof", labelText, labelText) : null;
+    const next =
+      key === "dcof"
+        ? mergeRowValues(
+            "dcof",
+            [fromLabel, value].filter((part): part is string => !!part),
+          )
+        : value;
+    if (!next) continue;
+    if (key === "dcof" && specs.dcof) {
+      specs.dcof = mergeRowValues("dcof", [specs.dcof, next]) ?? next;
+    } else {
+      specs[key] = next;
+    }
   }
   return specs;
 }
@@ -287,25 +339,78 @@ function looksLikeMeasurement(text: string): boolean {
 
 function thicknessContinuation(items: SpecTextItem[]): Partial<TechSpecs> {
   const specs: Partial<TechSpecs> = {};
-  const label = items.find((item) => /\bthickness\b/i.test(item.str));
+  const label = items.find((item) => isProductThicknessLabel(item.str));
   if (!label) return specs;
   const mms = items
     .filter((item) => item.x >= label.x - 8 && item.x < label.x + 420)
     .filter((item) => item.y <= label.y + 8 && label.y - item.y < 40)
     .map((item) => item.str)
     .join(" ");
-  const values = unique([...mms.matchAll(/(\d+(?:\.\d+)?)\s*mm/gi)].map((m) => formatMm(m[1])));
+  const values = thicknessReadings(mms);
   if (values.length) specs.thickness = values.join(" | ");
   return specs;
 }
 
 function bestOf(key: keyof TechSpecs, cells: string[], label: string): string | null {
-  let found: string | null = null;
-  for (const cell of cells) {
-    const value = valueFor(key, cell, label);
-    if (value) found = value;
+  // Breaking strength prints a required minimum and the factory's average
+  // on the same row. The rightmost measurement is the one they claim.
+  if (key === "breakingStrength") {
+    let found: string | null = null;
+    for (const cell of cells) {
+      if (isRequirement(cell) && found) continue;
+      const value = valueFor(key, cell, label);
+      if (value) found = value;
+    }
+    return found;
   }
-  return found;
+  const values: string[] = [];
+  for (const cell of cells) {
+    if (isRequirement(cell)) continue;
+    const value = valueFor(key, cell, label);
+    if (value) values.push(value);
+  }
+  return mergeRowValues(key, values);
+}
+
+function mergeRowValues(key: keyof TechSpecs, values: string[]): string | null {
+  const uniqueValues = unique(values);
+  if (uniqueValues.length === 0) return null;
+  if (uniqueValues.length === 1) return uniqueValues[0];
+  if (uniqueValues.includes("complies") && key !== "chemicalResistance" && key !== "stainResistance") {
+    return "complies";
+  }
+  const classes = uniqueValues.filter((value) => value.startsWith("class "));
+  if (classes.length >= 2 && classes.length <= 3 && classes.length === uniqueValues.length) {
+    const tokens = classes.map((value) => value.replace(/^class\s+/, ""));
+    return `class ${tokens.join(" / ")}`;
+  }
+  if (key === "breakingStrength" || key === "waterAbsorption") {
+    return uniqueValues[uniqueValues.length - 1];
+  }
+  if (key === "dcof") {
+    const parts = unique(uniqueValues.flatMap((value) => value.split(" | ")));
+    return preferThresholds(parts).join(" | ");
+  }
+  if (key === "thickness") return dominant(uniqueValues);
+  if (magnitudeSplit(uniqueValues)) return null;
+  if (uniqueValues.length <= 3) return uniqueValues.join(" | ");
+  return null;
+}
+
+function preferThresholds(values: string[]): string[] {
+  const thresholds = values.filter((value) => value.includes("≥"));
+  return thresholds.length ? thresholds : values;
+}
+
+function magnitudeSplit(values: string[]): boolean {
+  const nums = values
+    .map((value) => {
+      const match = value.match(/\d+(?:\.\d+)?/);
+      return match ? Number(match[0]) : NaN;
+    })
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (nums.length < 2) return false;
+  return Math.max(...nums) / Math.min(...nums) >= 8;
 }
 
 function valueFor(key: keyof TechSpecs, text: string, label = ""): string | null {
@@ -313,16 +418,18 @@ function valueFor(key: keyof TechSpecs, text: string, label = ""): string | null
   if (!cleaned || isAbsent(cleaned)) return null;
   if (isStandardCode(cleaned)) return null;
   const hinted = `${label} ${cleaned}`;
+  if (key === "frostResistance" && /no\s+damages/i.test(hinted)) return "resistant";
   if (key === "frostResistance" && /not\s*resistant|\bno\b/i.test(hinted)) return null;
   if (key === "frostResistance" && /\bproof\b/i.test(hinted)) return "resistant";
   if (key === "thickness") {
-    const after = [...hinted.matchAll(/(\d+(?:[.,]\d+)?)\s*mm/gi)].map((m) => formatMm(m[1]));
-    const before = [...hinted.matchAll(/\bmm\s*(\d+(?:[.,]\d+)?)/gi)].map((m) => formatMm(m[1]));
-    const mms = unique([...after, ...before]);
+    const mms = thicknessReadings(hinted);
     if (mms.length) return dominant(mms);
     if (/\(mm\)|\bmm\b/i.test(label) || /\bmm\b/i.test(cleaned)) {
       const bare = cleaned.match(/^(?:mm\s*)?(\d+(?:[.,]\d+)?)$/i);
-      if (bare) return formatMm(bare[1]);
+      if (bare) {
+        const n = Number(bare[1].replace(",", "."));
+        if (n >= 3 && n <= 40) return formatMm(bare[1]);
+      }
     }
     const inches = cleaned.match(/^(0\.\d{1,3})(?:\s*(?:in(?:ches|ch)?|["”″]))?$/i);
     if (inches && Number(inches[1]) > 0 && Number(inches[1]) < 2) return `${inches[1]}"`;
@@ -338,7 +445,9 @@ function valueFor(key: keyof TechSpecs, text: string, label = ""): string | null
   }
   if (key === "breakingStrength") {
     if (/^complies?$/i.test(cleaned) || /^compliant$/i.test(cleaned)) return "complies";
-    const matches = [...cleaned.matchAll(/(≥|>=)\s*(\d+(?:\.\d+)?)(?:\s*(lbf|lbs))?/gi)];
+    const matches = [...cleaned.matchAll(/(≥|>=)\s*(\d+(?:\.\d+)?)(?:\s*(lbf|lbs))?/gi)].filter(
+      (match) => Number(match[2]) >= 50,
+    );
     const match = matches[matches.length - 1];
     if (!match) return null;
     const unit = match[3] ? ` ${match[3].toLowerCase()}` : /\blbf\b/i.test(hinted) ? " lbf" : "";
@@ -351,10 +460,22 @@ function valueFor(key: keyof TechSpecs, text: string, label = ""): string | null
     return n == null ? null : String(n);
   }
   if (key === "dcof") {
-    const match = cleaned.match(/(≥|>=)?\s*(0\.\d{2})/);
-    if (!match) return null;
+    // BCRA ">0.40" is a different method sitting next to DCOF. Don't merge it in.
+    // Some sheets extract "≥" as a leading "t" (WET DCOF t0,42).
+    const clipped = cleaned
+      .split(/\b(?:BCRA|DIN|ASTM|ISO|UNI)\b/i)[0]
+      .replace(/(?:^|[^a-z0-9])t(?=0[.,]\d{2})/gi, (prefix) => `${prefix.slice(0, -1)}≥`);
+    const matches = [...clipped.matchAll(/(≥|>=|≥)?\s*(0[.,]\d{2})/g)];
+    if (matches.length === 0) return null;
     const wet = /wet/i.test(hinted) ? " wet" : "";
-    return `${match[1] ? "≥ " : ""}${match[2]}${wet}`.replace(/^>= /, "≥ ");
+    const formatted = unique(
+      matches.map((match) => {
+        const num = match[2].replace(",", ".");
+        const op = match[1] ? "≥ " : "";
+        return `${op}${num}${wet}`.replace(/^>= /, "≥ ");
+      }),
+    );
+    return preferThresholds(formatted).join(" | ");
   }
   if (key === "chemicalResistance" || key === "stainResistance" || key === "frostResistance") {
     return resistanceValue(cleaned, label);
@@ -366,8 +487,15 @@ function resistanceValue(cleaned: string, label: string): string | null {
   const source = `${label} ${cleaned}`.replace(/\s+/g, " ").trim();
   if (/not\s*resistant|not applicable/i.test(source)) return null;
   if (/\bnot\b/i.test(source) && /\bresistant\b/i.test(source)) return null;
-  const klass = source.match(/class\s*([a-e0-9])/i);
-  if (klass) return `class ${klass[1].toLowerCase()}`;
+  if (isRequirement(cleaned) && !/unaffected|conforme|complies|resist/i.test(cleaned)) return null;
+  const frost = /frost|freeze/i.test(source);
+  if (/^(?:conforme|complies?|passed?)$/i.test(cleaned)) return frost ? "resistant" : "complies";
+  if (frost && /no\s+damages|frost\s*proof|\bproof\b/i.test(source)) return "resistant";
+  const bare = cleaned.match(/^(GA|GB|GHA|HA|LA|[A-E])$/i);
+  if (bare && /stain|chemical|resist/i.test(source)) return `class ${bare[1].toLowerCase()}`;
+  // "Classe 5" is the Italian word, not class E. Require a space after class/classe.
+  const klass = source.match(/\bclass(?:e)?\s+(GA|GB|GHA|HA|LA|[A-E]|[1-5])\b/i);
+  if (klass && !isRequirement(cleaned)) return `class ${klass[1].toLowerCase()}`;
   if (/unaffected/i.test(source)) return "unaffected";
   const body = source.replace(/\b(?:chemical|stain|frost|freeze)\s+resist\w*/gi, " ");
   if (/\b(no|n\/a)\b/i.test(body)) return null;
@@ -376,27 +504,28 @@ function resistanceValue(cleaned: string, label: string): string | null {
 }
 
 function percentValue(text: string): string | null {
+  const num = "(\\d+(?:[.,]\\d+)?)";
+  const approx = text.match(new RegExp(`~\\s*${num}\\s*%`, "i"));
+  if (approx) return `~ ${dotNumber(approx[1])}%`;
   const range = text.match(
-    /(\d+(?:\.\d+)?)\s*%\s*<\s*wa\s*(?:≤|<=)?\s*(\d+(?:\.\d+)?)\s*%/i,
+    new RegExp(`${num}\\s*%\\s*<\\s*wa\\s*(?:≤|<=)?\\s*${num}\\s*%`, "i"),
   );
-  if (range) return `${trimZero(range[1])}% – ${trimZero(range[2])}%`;
-  const between = text.match(/(\d+(?:\.\d+)?)\s*%\s*[–-]\s*(\d+(?:\.\d+)?)\s*%/);
-  if (between) return `${trimZero(between[1])}% – ${trimZero(between[2])}%`;
-  const single = text.match(/(≤|≥|<|>|<=|>=)\s*(\d+(?:\.\d+)?)\s*%/);
-  if (!single) return null;
-  const op = single[1].replace("<=", "≤").replace(">=", "≥");
-  return `${op} ${trimZero(single[2])}%`;
+  if (range) return `${dotNumber(range[1])}% – ${dotNumber(range[2])}%`;
+  const between = text.match(new RegExp(`${num}\\s*%\\s*[–-]\\s*${num}\\s*%`));
+  if (between) return `${dotNumber(between[1])}% – ${dotNumber(between[2])}%`;
+  const single = text.match(new RegExp(`(≤|≥|<|>|<=|>=)\\s*${num}\\s*%`));
+  if (single) {
+    const op = single[1].replace("<=", "≤").replace(">=", "≥");
+    return `${op} ${dotNumber(single[2])}%`;
+  }
+  const maximum = text.match(new RegExp(`\\bmax(?:imum)?\\s*${num}\\s*%`, "i"));
+  if (maximum) return `≤ ${dotNumber(maximum[1])}%`;
+  return null;
 }
 
 function valueGrounded(key: keyof TechSpecs, value: string, text: string): boolean {
   const lower = value.toLowerCase();
-  if (key === "shadeVariation") {
-    const range = lower.match(/v([1-4])-v([1-4])/);
-    if (range) {
-      return new RegExp(`v\\s*${range[1]}\\s*(?:[-–]|to)\\s*v?\\s*${range[2]}\\b`).test(text);
-    }
-    return [...lower.matchAll(/v[1-4]/g)].every((m) => new RegExp(`\\bv\\s*${m[0].slice(1)}\\b`).test(text));
-  }
+  if (key === "shadeVariation") return shadeGrounded(lower, text);
   if (key === "breakingStrength") {
     if (lower.includes("complies")) {
       return /break(?:ing)?\s*strength[^.]{0,80}complies/.test(text);
@@ -462,7 +591,9 @@ function valueAfterLabel(
 
 function labelKey(text: string): keyof TechSpecs | null {
   for (const rule of LABEL_RULES) {
-    if (rule.re.test(text)) return rule.key;
+    if (!rule.re.test(text)) continue;
+    if (rule.key === "thickness" && !isProductThicknessLabel(text)) return null;
+    return rule.key;
   }
   return null;
 }
@@ -525,6 +656,259 @@ function splitCells(row: SpecTextItem[]): string[] {
   }
   if (buf.trim()) cells.push(buf.trim());
   return cells;
+}
+
+function shadeGrounded(value: string, text: string): boolean {
+  const ratings = [...value.matchAll(/v([1-4])/g)].map((match) => match[1]);
+  if (ratings.length === 0) return false;
+  const label =
+    "(?:shade(?:\\s*and\\s*texture)?|colou?r)\\s*(?:variation|rating)|(?:^|[^a-z])variation\\s*:";
+  return ratings.every((n) => {
+    const ahead = new RegExp(`${label}[^\\d]{0,48}\\bv\\s*${n}\\b`, "i");
+    const behind = new RegExp(`\\bv\\s*${n}\\b[^\\d]{0,24}(?:shade|colou?r)\\s*(?:variation|rating)`, "i");
+    return ahead.test(text) || behind.test(text);
+  });
+}
+
+function isProductThicknessLabel(text: string): boolean {
+  if (/thickness\s*(?:≥|>=|>|<|≤|<=)/i.test(text)) return false;
+  return /\b(?:thickness|spessore)\b/i.test(text);
+}
+
+function thicknessReadings(text: string): string[] {
+  // "S ≥ 1300 N (thickness ≥ 7,5 mm)" is the test condition, not the tile.
+  const body = text.replace(/thickness\s*(?:≥|>=|>|<|≤|<=)\s*\d+(?:[.,]\d+)?\s*mm/gi, " ");
+  const out: string[] = [];
+  const re = /(?<![\d.,])(\d+(?:[.,]\d+)?)\s*mm\b/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(body))) {
+    const before = body.slice(Math.max(0, match.index - 2), match.index);
+    if (/[±]/.test(before)) continue;
+    const n = Number(match[1].replace(",", "."));
+    if (!Number.isFinite(n) || n < 3 || n > 40) continue;
+    out.push(formatMm(match[1]));
+  }
+  return unique(out);
+}
+
+function isRequirement(cell: string): boolean {
+  return /\b(min(?:imo|imum)?|required|requisiti|as reported)\b/i.test(cell);
+}
+
+function rememberStandard(
+  standards: Partial<Record<keyof TechSpecs, string>>,
+  key: keyof TechSpecs,
+  text: string,
+): void {
+  if (standards[key]) return;
+  const standard = citedStandard(text);
+  if (standard && standardFits(key, standard)) standards[key] = standard;
+}
+
+/** The test method printed next to a value. Not a relabeling of another method. */
+function standardsIn(text: string): string[] {
+  const found: string[] = [];
+  const splitRe = /UNI\s+EN\s+ISO[\s\S]{0,80}?10545\s*[./-]\s*(\d+)/gi;
+  let split: RegExpExecArray | null;
+  while ((split = splitRe.exec(text))) found.push(tidyStandard(`UNI EN ISO 10545-${split[1]}`));
+  const re =
+    /(?:UNI\s+EN\s+ISO|ISO)\s*10545[.\-/]\s*\d+|ASTM\s*C-?\s*\d+|ANSI\s*A\s*\d+(?:\.\d+)?|DIN(?:\s+EN)?\s*\d+/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text))) found.push(tidyStandard(match[0]));
+  return unique(found);
+}
+
+export function citedStandard(text: string): string | null {
+  const uni = text.match(/UNI\s+EN\s+ISO\s*10545[.\-/]\s*\d+/i);
+  if (uni) return tidyStandard(uni[0]);
+  const iso = text.match(/ISO\s*10545[.\-/]\s*\d+/i);
+  if (iso) return tidyStandard(iso[0]);
+  const astm = text.match(/ASTM\s*C-?\s*\d+/i);
+  if (astm) return tidyStandard(astm[0]);
+  const ansi = text.match(/ANSI\s*A\s*\d+(?:\.\d+)?/i);
+  if (ansi) return tidyStandard(ansi[0]);
+  const din = text.match(/DIN(?:\s+EN)?\s*\d+/i);
+  if (din) return tidyStandard(din[0]);
+  return null;
+}
+
+function standardBesideValue(key: keyof TechSpecs, blob: string, value: string): string | null {
+  const num = value.match(/(\d+(?:[.,]\d+)?)/)?.[1];
+  if (!num || !value.includes("%")) return null;
+  const re = new RegExp(`(?:>|≥|≤|<)\\s*${num.replace(".", "[.,]")}\\s*%`, "g");
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(blob))) {
+    const window = blob.slice(match.index, match.index + 70);
+    const standard = standardsIn(window).find((candidate) => standardFits(key, candidate));
+    if (standard) return standard;
+  }
+  return null;
+}
+
+export function standardNear(key: keyof TechSpecs, text: string): string | null {
+  const rule = LABEL_RULES.find((item) => item.key === key);
+  if (!rule) return null;
+  const re = new RegExp(rule.re.source, "ig");
+  let match: RegExpExecArray | null;
+  const found: string[] = [];
+  while ((match = re.exec(text))) {
+    const after = text.slice(match.index, match.index + match[0].length + 280);
+    const before = text.slice(Math.max(0, match.index - 60), match.index);
+    const fitting = unique(
+      [...standardsIn(after), ...standardsIn(before)].filter(
+        (candidate) => standardFits(key, candidate) && plausibleStandard(candidate),
+      ),
+    );
+    if (!fitting.length) continue;
+    const measured =
+      /[≤≥]|0[.,]\d{2}|\bclass(?:e)?\s+[a-e0-9]\b|\bresistant\b|\bunaffected\b|\bcomplies\b|\bconforme\b|\d+(?:[.,]\d+)?\s*(?:%|mm)\b/i.test(
+        `${before} ${after}`,
+      );
+    if (!measured) continue;
+    found.push(...fitting);
+  }
+  const choices = unique(found);
+  if (key === "dcof") {
+    const specific = choices.find((candidate) => /326\.3/.test(candidate));
+    if (specific) return specific;
+  }
+  return choices.length ? choices.slice(0, 2).join(" / ") : null;
+}
+
+function plausibleStandard(standard: string): boolean {
+  const ansi = standard.match(/ANSI\s*A\s*(\d+)/i);
+  if (ansi && ansi[1].length < 3) return false;
+  const astm = standard.match(/ASTM\s*C-?\s*(\d+)/i);
+  if (astm && astm[1].length < 3) return false;
+  return true;
+}
+
+function tidyStandard(raw: string): string {
+  return raw
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b(uni|en|iso|astm|ansi|din)\b/gi, (word) => word.toUpperCase())
+    .replace(/ANSI\s+A\s+(\d)/i, "ANSI A$1")
+    .replace(/(10545)\s*[./-]\s*/gi, "$1-");
+}
+
+function standardFits(key: keyof TechSpecs, standard: string): boolean {
+  if (/10545|ASTM\s*C|A\s*326|A\s*137/i.test(standard)) {
+    return keyForStandard(standard) === key;
+  }
+  return true;
+}
+
+function keyForStandard(standard: string): keyof TechSpecs | null {
+  const part = standard.match(/10545[.\-/]\s*(\d+)/i)?.[1];
+  if (part && ISO_PART[part]) return ISO_PART[part];
+  if (/C-?\s*373\b/i.test(standard)) return "waterAbsorption";
+  if (/C-?\s*648\b/i.test(standard)) return "breakingStrength";
+  if (/C-?\s*1026\b/i.test(standard)) return "frostResistance";
+  if (/C-?\s*650\b/i.test(standard)) return "chemicalResistance";
+  if (/C-?\s*499\b/i.test(standard)) return "thickness";
+  if (/A\s*326\.3|A\s*137\.1/i.test(standard)) return "dcof";
+  return null;
+}
+
+const ISO_PART: Partial<Record<string, keyof TechSpecs>> = {
+  "3": "waterAbsorption",
+  "4": "breakingStrength",
+  "12": "frostResistance",
+  "13": "chemicalResistance",
+  "14": "stainResistance",
+};
+
+function applyFeatureLines(
+  flat: string,
+  specs: Partial<TechSpecs>,
+  standards: Partial<Record<keyof TechSpecs, string>>,
+): void {
+  const re =
+    /((?:UNI\s+EN\s+)?ISO\s*10545[.\-/]\s*\d+|DIN(?:\s+EN)?\s*\d+|ANSI\s*A\s*\d+(?:\.\d+)?)(?:\s*\([^)]{0,24}\))?\s*:\s*([\s\S]{1,60}?)(?=\s+(?:UNI\b|ISO\b|DIN\b|ANSI\b|BCRA\b)|$)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(flat))) {
+    const standard = tidyStandard(match[1]);
+    const rawValue = match[2].replace(/\s+/g, " ").trim();
+    const part = standard.match(/10545[.\-/]\s*(\d+)/i)?.[1];
+    let key: keyof TechSpecs | null = part ? ISO_PART[part] ?? null : null;
+    if (/ANSI/i.test(standard) && /dcof|friction|0[.,]\d{2}/i.test(`${standard} ${rawValue}`)) key = "dcof";
+    if (/DIN/i.test(standard) && /\bR\s*\d{1,2}\b/i.test(rawValue)) key = "dcof";
+    if (!key) continue;
+    const value = featureValue(key, rawValue);
+    if (!value) continue;
+    if (key === "dcof" && specs.dcof && specs.dcof !== value) {
+      const extras = value.split(" · ").filter((part) => !specs.dcof!.toUpperCase().includes(part.toUpperCase()));
+      if (extras.length) specs.dcof = `${specs.dcof} · ${extras.join(" · ")}`;
+    } else {
+      specs[key] = value;
+    }
+    const prev = standards[key];
+    standards[key] = prev && !prev.includes(standard) ? `${prev} / ${standard}` : standard;
+  }
+  if (!specs.thickness) {
+    const cluster = thicknessCluster(flat);
+    if (cluster) specs.thickness = cluster;
+  }
+}
+
+function appendSlipRatings(flat: string, specs: Partial<TechSpecs>): void {
+  const found: string[] = [];
+  const re = /slip\s*resistance|en\s*16165|din\s*(?:en\s*)?(?:51130|51097)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(flat))) {
+    const window = flat.slice(Math.max(0, match.index - 40), match.index + 90);
+    for (const rating of window.matchAll(/\bR\s*(\d{1,2})\b/g)) {
+      const n = Number(rating[1]);
+      if (n < 9 || n > 13) continue;
+      found.push(`R${n}`);
+    }
+  }
+  for (const rating of unique(found)) {
+    if (specs.dcof && !specs.dcof.toUpperCase().includes(rating)) {
+      specs.dcof = `${specs.dcof} · ${rating}`;
+    } else if (!specs.dcof) {
+      specs.dcof = rating;
+    }
+  }
+}
+
+function featureValue(key: keyof TechSpecs, raw: string): string | null {
+  if (key === "frostResistance") {
+    if (/resist|conforme|pass/i.test(raw)) return "resistant";
+    return null;
+  }
+  if (key === "chemicalResistance" || key === "stainResistance") {
+    const klass = raw.match(/^(GA|GB|GHA|HA|LA|[A-E]|[1-5])\b/i);
+    if (klass) return `class ${klass[1].toLowerCase()}`;
+    return resistanceValue(raw, key === "chemicalResistance" ? "chemical resistance" : "stain resistance");
+  }
+  if (key === "dcof") {
+    const nums = [...raw.matchAll(/(≥|>=)?\s*(0[.,]\d{2})/g)].map((item) => {
+      const op = item[1] ? "≥ " : "";
+      return `${op}${item[2].replace(",", ".")}`;
+    });
+    const ratings = unique([...raw.matchAll(/\bR\s*(\d{1,2})\b/gi)].map((item) => `R${item[1]}`));
+    const parts = [...nums, ...ratings];
+    return parts.length ? parts.join(" · ") : null;
+  }
+  if (key === "waterAbsorption") return percentValue(raw);
+  if (key === "breakingStrength") return valueFor("breakingStrength", raw, "breaking strength");
+  return null;
+}
+
+function thicknessCluster(flat: string): string | null {
+  const anchor = flat.search(/ISO\s*10545|UNI\s+EN\s+ISO/i);
+  if (anchor < 0) return null;
+  const window = flat.slice(Math.max(0, anchor - 80), anchor);
+  const readings = thicknessReadings(window);
+  if (readings.length === 0 || readings.length > 3) return null;
+  return readings.join(" | ");
+}
+
+function dotNumber(raw: string): string {
+  const n = Number(raw.replace(",", "."));
+  return Number.isInteger(n) ? String(n) : String(n);
 }
 
 function escapeHtml(text: string): string {

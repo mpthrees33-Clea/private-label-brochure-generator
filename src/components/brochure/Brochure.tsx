@@ -133,6 +133,11 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
           availabilityFinishes={data.availabilityFinishes}
           finishLegend={data.finishLegend}
         />
+        {data.specialPieces && data.specialPieces.length > 0 && (
+          <p className="mt-1 text-[10px] lowercase leading-tight text-brochure-gray">
+            trims & special pieces: {data.specialPieces.join(", ")}
+          </p>
+        )}
         {(data.finishLegend.length > 0 || data.footnotes.length > 0) && (
           <div className="mt-1.5 flex justify-between text-[10px] lowercase text-brochure-gray">
             <div>
@@ -152,7 +157,11 @@ function Page2({ data, swatch }: { data: BrochureData; swatch: SwatchLayout }) {
         )}
       </Block>
       <Block id="techSpecs" pos={techSpecsPos}>
-        <TechSpecsTable specs={data.techSpecs} />
+        <TechSpecsTable
+          specs={data.techSpecs}
+          standards={data.specStandards}
+          sources={data.specSources}
+        />
       </Block>
       <Block id="contact" pos={contactPos}>
         <ContactBlock />

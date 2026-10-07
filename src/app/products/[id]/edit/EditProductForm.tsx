@@ -348,6 +348,11 @@ export function EditProductForm({ product }: { product: Product }) {
                   }
                   className="input"
                 />
+                {product.specSources?.[field.key] && (
+                  <span className="mt-1 block truncate text-[10px] text-fg-faint" title={product.specSources[field.key]}>
+                    source: {product.specSources[field.key]}
+                  </span>
+                )}
               </label>
             ))}
           </div>

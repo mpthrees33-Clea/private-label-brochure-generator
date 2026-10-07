@@ -4,6 +4,7 @@ import { factoryFromUrl } from "../factories";
 import { relevantLessonsForScrape } from "../store/lessons";
 import { catalogSummary, type PageCatalog } from "./catalog";
 import { finalizeScrapedProduct } from "./normalize";
+import { isPlaceholderName, RESERVED_TRINITY_NAMES } from "../trinity-names";
 
 const SYSTEM_PROMPT = `You extract structured tile / flooring product info from factory product pages for the Trinity Surfaces private-label brochure generator.
 
@@ -386,20 +387,18 @@ function buildScrapedProduct(
 // Trinity reserves a small set of names (their existing catalog).
 // If Claude proposes one of those, fall through to a deterministic
 // fallback derived from the factory name.
-const RESERVED_TRINITY_NAMES = new Set([
-  "kendall",
-  "lunett",
-  "oberlin",
-  "torrance",
-]);
-
 function normalizeTrinityName(suggested: string | undefined, factoryName: string): string {
   const cleaned = (suggested ?? "")
     .toLowerCase()
     .replace(/[^a-z]/g, "")
     .trim();
   const factoryLower = factoryName.toLowerCase().replace(/\s+/g, "");
-  if (!cleaned || cleaned === factoryLower || RESERVED_TRINITY_NAMES.has(cleaned)) {
+  if (
+    !cleaned ||
+    cleaned === factoryLower ||
+    isPlaceholderName(cleaned) ||
+    RESERVED_TRINITY_NAMES.has(cleaned)
+  ) {
     // Deterministic placeholder so the rep is forced to override it on
     // the preview page rather than silently shipping a duplicate.
     return "";

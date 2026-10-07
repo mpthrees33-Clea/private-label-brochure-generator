@@ -8,7 +8,7 @@
     "pdf:css": "node scripts/build-brochure-css.mjs",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --import tsx --test src/lib/brochure-layout.test.ts src/lib/tech-spec-columns.test.ts src/lib/pdf/print-image.test.ts src/lib/pdf/inline-images.test.ts src/lib/scrapers/normalize.test.ts src/lib/scrapers/listed-sizes.test.ts src/lib/scrapers/spec-parse.test.ts",
+    "test": "node --import tsx --test src/lib/brochure-layout.test.ts src/lib/tech-spec-columns.test.ts src/lib/pdf/print-image.test.ts src/lib/pdf/inline-images.test.ts src/lib/scrapers/normalize.test.ts src/lib/scrapers/listed-sizes.test.ts src/lib/scrapers/spec-parse.test.ts src/lib/trinity-names.test.ts",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",

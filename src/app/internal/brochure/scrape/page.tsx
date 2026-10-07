@@ -60,12 +60,6 @@ export default async function ScrapeRenderPage({
   }
 
   const data = scrapedToBrochure(scraped);
-  // Fallback Trinity name if AI didn't suggest one — keeps the product
-  // creatable; the rep is forced to rename it on the next page before
-  // the Download button enables. (`""` would fail the quality gate.)
-  if (!data.trinityName || data.trinityName.trim() === "") {
-    data.trinityName = "rename-me";
-  }
 
   const created = await createProduct({
     ...data,

@@ -27,12 +27,15 @@ export function techSpecHeader(label: string, standard?: string): string {
   return `${label} (${standard})`;
 }
 
-export function visibleTechSpecColumns(specs: Partial<TechSpecs>): TechSpecColumn[] {
+export function visibleTechSpecColumns(
+  specs: Partial<TechSpecs>,
+  standards?: Partial<Record<keyof TechSpecs, string>> | null,
+): TechSpecColumn[] {
   return COLUMNS.filter((column) => {
     const value = specs[column.key];
     return value != null && String(value).trim() !== "";
   }).map((column) => ({
     key: column.key,
-    header: techSpecHeader(column.label, column.standard),
+    header: techSpecHeader(column.label, standards?.[column.key] || column.standard),
   }));
 }

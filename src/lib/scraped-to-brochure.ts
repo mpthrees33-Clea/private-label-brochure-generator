@@ -32,7 +32,10 @@ export function scrapedToBrochure(
     availabilityFinishes: lowercaseFinishMap(p.availabilityFinishes),
     finishLegend: p.finishLegend,
     footnotes: p.footnotes,
+    specialPieces: p.specialPieces,
     techSpecs: p.techSpecs,
+    specStandards: p.specStandards,
+    specSources: p.specSources,
   };
 }
 

@@ -3,9 +3,10 @@ import * as cheerio from "cheerio";
 import type { TechSpecs } from "./types";
 import type { FetchedAnchor } from "./fetch";
 import {
-  parseTechSpecItems,
-  parseTechSpecsFromHtml,
+  parseTechSpecItemsDetailed,
+  parseTechSpecsDetailed,
   groundTechSpecs,
+  type ParsedSpecRecord,
   type SpecTextItem,
 } from "./spec-parse";
 
@@ -191,12 +192,23 @@ async function extractFromPdf(
  * Values come from the document text. The model only fills gaps, and
  * only with numbers that appear in that document.
  */
+export interface EnrichedSpecs {
+  specs: Partial<TechSpecs>;
+  standards: Partial<Record<keyof TechSpecs, string>>;
+  sources: Partial<Record<keyof TechSpecs, string>>;
+}
+
 export async function enrichTechSpecs(
   initial: Partial<TechSpecs>,
   anchors: FetchedAnchor[],
-  opts?: { pageUrl?: string },
-): Promise<Partial<TechSpecs>> {
-  if (nonNullSpecCount(initial) >= 6) return initial;
+  opts?: { pageUrl?: string; standards?: EnrichedSpecs["standards"]; sources?: EnrichedSpecs["sources"] },
+): Promise<EnrichedSpecs> {
+  const standards: EnrichedSpecs["standards"] = { ...(opts?.standards ?? {}) };
+  const sources: EnrichedSpecs["sources"] = { ...(opts?.sources ?? {}) };
+  stampSource(initial, sources, opts?.pageUrl);
+  if (nonNullSpecCount(initial) >= 6) {
+    return dropUnsourced({ specs: initial, standards, sources });
+  }
   const token = opts?.pageUrl ? collectionToken(opts.pageUrl) : "";
   const queue = discoverSpecUrls(anchors, opts?.pageUrl);
   const seen = new Set(queue);
@@ -216,7 +228,10 @@ export async function enrichTechSpecs(
       if (isPdf) {
         const bytes = await res.arrayBuffer();
         if (bytes.byteLength === 0 || bytes.byteLength > MAX_PDF_BYTES) continue;
-        pdfSpecs = fillEmpty(pdfSpecs, await specsFromPdf(bytes));
+        const parsed = await specsFromPdf(bytes);
+        pdfSpecs = fillEmpty(pdfSpecs, parsed.specs);
+        fillRecord(standards, parsed.standards, parsed.specs);
+        stampSource(parsed.specs, sources, url, pdfSpecs);
         merged = fillEmpty(initial, pdfSpecs);
         continue;
       }
@@ -228,9 +243,25 @@ export async function enrichTechSpecs(
         continue;
       }
       const html = await res.text();
-      // A product page's own line ("Complies", "V2") replaces a number
-      // taken from a sitewide chart. A PDF only fills gaps.
-      htmlSpecs = { ...htmlSpecs, ...parseTechSpecsFromHtml(html) };
+      const parsed = parseTechSpecsDetailed(html);
+      const sibling = opts?.pageUrl ? isSiblingProduct(url, opts.pageUrl, token) : false;
+      if (sibling) {
+        // The product's own line ("Complies") replaces a number from a chart.
+        htmlSpecs = { ...htmlSpecs, ...parsed.specs };
+        fillRecord(standards, parsed.standards, parsed.specs, true);
+        for (const key of Object.keys(parsed.specs) as (keyof TechSpecs)[]) {
+          if (parsed.specs[key]) sources[key] = url;
+        }
+      } else {
+        const have = { ...initial, ...pdfSpecs, ...htmlSpecs };
+        const added: Partial<TechSpecs> = {};
+        for (const key of Object.keys(parsed.specs) as (keyof TechSpecs)[]) {
+          if (!have[key] && parsed.specs[key]) added[key] = parsed.specs[key]!;
+        }
+        htmlSpecs = { ...htmlSpecs, ...added };
+        fillRecord(standards, parsed.standards, added);
+        stampSource(added, sources, url);
+      }
       merged = { ...fillEmpty(initial, pdfSpecs), ...htmlSpecs };
       if (nonNullSpecCount(merged) >= 4 || !token) continue;
       for (const pdf of pdfLinks(html, url, token)) {
@@ -242,7 +273,11 @@ export async function enrichTechSpecs(
       // Partial specs are better than a failed scrape.
     }
   }
-  return { ...fillEmpty(initial, pdfSpecs), ...htmlSpecs };
+  return dropUnsourced({
+    specs: { ...fillEmpty(initial, pdfSpecs), ...htmlSpecs },
+    standards,
+    sources,
+  });
 }
 
 function discoverSpecUrls(anchors: FetchedAnchor[], pageUrl?: string): string[] {
@@ -346,14 +381,54 @@ function fillEmpty(base: Partial<TechSpecs>, next: Partial<TechSpecs>): Partial<
   return out;
 }
 
-async function specsFromPdf(bytes: ArrayBuffer): Promise<Partial<TechSpecs>> {
+async function specsFromPdf(bytes: ArrayBuffer): Promise<ParsedSpecRecord> {
   const items = await pdfItems(bytes);
-  const parsed = parseTechSpecItems(items);
-  if (nonNullSpecCount(parsed) > 0 || !process.env.ANTHROPIC_API_KEY) return parsed;
+  const parsed = parseTechSpecItemsDetailed(items);
+  if (nonNullSpecCount(parsed.specs) > 0 || !process.env.ANTHROPIC_API_KEY) return parsed;
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const extracted = await extractFromPdf(client, bytes);
   if (!extracted) return parsed;
-  return groundTechSpecs(extracted, items.map((item) => item.str).join(" "));
+  return {
+    specs: groundTechSpecs(extracted, items.map((item) => item.str).join(" ")),
+    standards: parsed.standards,
+  };
+}
+
+function stampSource(
+  specs: Partial<TechSpecs>,
+  sources: Partial<Record<keyof TechSpecs, string>>,
+  url: string | undefined,
+  only?: Partial<TechSpecs>,
+): void {
+  if (!url) return;
+  for (const key of Object.keys(specs) as (keyof TechSpecs)[]) {
+    if (!specs[key]) continue;
+    if (only && !only[key]) continue;
+    if (!sources[key]) sources[key] = url;
+  }
+}
+
+function fillRecord(
+  base: Partial<Record<keyof TechSpecs, string>>,
+  next: Partial<Record<keyof TechSpecs, string>>,
+  specs: Partial<TechSpecs>,
+  overwrite = false,
+): void {
+  for (const key of Object.keys(specs) as (keyof TechSpecs)[]) {
+    if (!specs[key] || !next[key]) continue;
+    if (overwrite || !base[key]) base[key] = next[key];
+  }
+}
+
+function dropUnsourced(record: EnrichedSpecs): EnrichedSpecs {
+  const specs: Partial<TechSpecs> = { ...record.specs };
+  for (const key of Object.keys(specs) as (keyof TechSpecs)[]) {
+    if (!record.sources[key]) {
+      delete specs[key];
+      delete record.standards[key];
+    }
+  }
+  return { specs, standards: record.standards, sources: record.sources };
 }
 
 async function pdfItems(bytes: ArrayBuffer): Promise<SpecTextItem[]> {

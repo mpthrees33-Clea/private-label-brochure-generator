@@ -53,6 +53,12 @@ export interface ScrapedProduct {
    *  (cream subway is glossy only; white is glossy and matte). */
   availabilityFinishes?: Record<string, Record<string, string[]>>;
   techSpecs: Partial<TechSpecs>;
+  /** Test method printed next to each value. */
+  specStandards?: Partial<Record<keyof TechSpecs, string>>;
+  /** Document URL each value was read from. */
+  specSources?: Partial<Record<keyof TechSpecs, string>>;
+  /** Trims and named decors shown as one line under the size chart. */
+  specialPieces?: string[];
   finishLegend: string[];
   footnotes: string[];
 }

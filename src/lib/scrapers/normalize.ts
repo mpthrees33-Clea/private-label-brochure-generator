@@ -3,8 +3,10 @@ import { extractListedFormats, type ListedFormat } from "./listed-sizes";
 import {
   groundTechSpecs,
   parseTechSpecs,
-  parseTechSpecsFromHtml,
+  parseTechSpecsDetailed,
+  standardNear,
 } from "./spec-parse";
+import { splitSpecialPieces } from "./special-pieces";
 import { extractSwatchCards } from "./catalog";
 import {
   canonicalFinish,
@@ -65,7 +67,12 @@ export function finalizeScrapedProduct(
 
   const pageHtml = ctx.pageHtml || (ctx.sourceText?.includes("<") ? ctx.sourceText : "");
   if (pageHtml) {
-    applyListedFormats(next, extractListedFormats(pageHtml), Boolean(catalog && catalog.groups.length > 0));
+    const listed = extractListedFormats(pageHtml);
+    const split = splitSpecialPieces(pageHtml, listed);
+    applyListedFormats(next, split.formats, Boolean(catalog && catalog.groups.length > 0));
+    const onChart = new Set(next.sizes.map((size) => sizeChartLabel(size).toLowerCase()));
+    next.specialPieces = split.specials.filter((label) => !onChart.has(label.toLowerCase()));
+    applySharedAvailability(next, pageHtml);
   }
   collapseFinishVariants(next);
   applyGroundedSpecs(next, pageHtml, sourceText);
@@ -756,9 +763,50 @@ function collapseFinishVariants(product: ScrapedProduct): void {
 }
 
 function applyGroundedSpecs(product: ScrapedProduct, pageHtml: string, sourceText: string): void {
-  const parsed = pageHtml ? parseTechSpecsFromHtml(pageHtml) : parseTechSpecs(sourceText);
+  const detailed = pageHtml ? parseTechSpecsDetailed(pageHtml) : { specs: parseTechSpecs(sourceText), standards: {} };
   const grounded = groundTechSpecs(product.techSpecs, `${pageHtml}\n${sourceText}`);
-  product.techSpecs = { ...grounded, ...stripEmpty(parsed) };
+  product.techSpecs = { ...grounded, ...stripEmpty(detailed.specs) };
+  product.specStandards = { ...(product.specStandards ?? {}), ...detailed.standards };
+  const blob = `${pageHtml}\n${sourceText}`;
+  for (const key of Object.keys(product.techSpecs) as (keyof ScrapedProduct["techSpecs"])[]) {
+    if (!product.specStandards[key]) {
+      const near = standardNear(key, blob);
+      if (near) product.specStandards[key] = near;
+    }
+  }
+  const source = product.factoryUrl || "";
+  product.specSources = { ...(product.specSources ?? {}) };
+  if (source) {
+    for (const key of Object.keys(product.techSpecs) as (keyof ScrapedProduct["techSpecs"])[]) {
+      if (!product.specSources[key]) product.specSources[key] = source;
+    }
+  }
+}
+
+function applySharedAvailability(product: ScrapedProduct, html: string): void {
+  const colors = product.colors.map((color) => color.name).filter(Boolean);
+  if (colors.length < 2) return;
+  const flat = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, " ");
+  const re =
+    /(\d+(?:[.,]\d+)?\s*["”″]?\s*[x×]\s*\d+(?:[.,]\d+)?\s*["”″]?)\s*(?:stretch\s+)?(mosaic|bullnose|covebase)\s*\((\d+)\)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(flat))) {
+    if (Number(match[3]) !== colors.length) continue;
+    const parsed = parseSizeLabel(`${match[1]} ${match[2]}`);
+    if (!parsed) continue;
+    const chart = sizeChartLabel({ label: parsed.label, isDeco: parsed.isDeco });
+    for (const color of colors) {
+      const key = color.toLowerCase();
+      const list = product.availability[key] ?? [];
+      if (!list.some((entry) => sizeChartLabel({ label: entry }) === chart || entry === chart)) {
+        product.availability[key] = [...list, chart];
+      }
+    }
+  }
 }
 
 function stripEmpty(specs: Partial<ScrapedProduct["techSpecs"]>): Partial<ScrapedProduct["techSpecs"]> {

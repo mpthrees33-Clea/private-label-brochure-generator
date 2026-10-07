@@ -44,7 +44,13 @@ export interface BrochureData {
   finishLegend: string[];
   /** Optional footnotes shown under the sizes matrix */
   footnotes: string[];
+  /** Trims and named specials that do not fit a size-chart column. */
+  specialPieces?: string[];
   techSpecs: Partial<TechSpecs>;
+  /** Test method cited by the factory for each spec. Absent keys keep the template default. */
+  specStandards?: Partial<Record<keyof TechSpecs, string>>;
+  /** Page or spec-sheet URL each value was read from. */
+  specSources?: Partial<Record<keyof TechSpecs, string>>;
   /** Per-block manual position overrides set by the rep in the
    *  drag-to-position editor. Missing keys use the layout defaults. */
   layoutOverrides?: LayoutOverrides;

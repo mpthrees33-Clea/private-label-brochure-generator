@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   groundTechSpecs,
   parseTechSpecItems,
+  parseTechSpecsDetailed,
   parseTechSpecsFromHtml,
   type SpecTextItem,
 } from "./spec-parse";
@@ -193,5 +194,70 @@ describe("tech spec parsing", () => {
       "Breaking strength ASTM C648 ≥ 125 lbf ≥350 lbf",
     );
     assert.equal(kept.breakingStrength, "≥ 350 lbf");
+  });
+
+  it("does not treat a chromatic-variation disclaimer or a stray v2 as shade", () => {
+    const html = `<p>COLOUR SHADE VARIATION Every product is characterised by colour-shading. LEED V4. chromatic variation may occur.</p>`;
+    const specs = parseTechSpecsFromHtml(html);
+    assert.equal(specs.shadeVariation, undefined);
+    const grounded = groundTechSpecs(
+      { shadeVariation: "v2" },
+      "chromatic variation may occur. LEED V4. v2 appears in the footer.",
+    );
+    assert.equal(grounded.shadeVariation, undefined);
+  });
+
+  it("keeps the cited ISO and DIN methods and both surface classes", () => {
+    const html = `<p>MODERATE 6,5 mm* (120x278) 8,5 mm UNI EN ISO 10545.12: RESISTANT UNI EN ISO 10545.13: GA UNI EN ISO 10545.14: 5 DIN 51130: R9 (Natural) - R10 (Structured) ANSI A137.1 (DCOF): ≥0,42 BCRA: >0,40</p>`;
+    const parsed = parseTechSpecsDetailed(html);
+    assert.equal(parsed.specs.shadeVariation, undefined);
+    assert.equal(parsed.specs.frostResistance, "resistant");
+    assert.equal(parsed.specs.chemicalResistance, "class ga");
+    assert.equal(parsed.specs.stainResistance, "class 5");
+    assert.equal(parsed.specs.thickness, "6.5mm | 8.5mm");
+    assert.match(parsed.specs.dcof || "", /0\.42/);
+    assert.match(parsed.specs.dcof || "", /R9/);
+    assert.match(parsed.specs.dcof || "", /R10/);
+    assert.equal(parsed.specs.dcof?.includes("0.40"), false);
+    assert.match(parsed.standards.frostResistance || "", /ISO 10545[-.]12/);
+    assert.match(parsed.standards.chemicalResistance || "", /ISO 10545[-.]13/);
+    assert.equal(/ASTM/.test(parsed.standards.frostResistance || ""), false);
+  });
+
+  it("joins product classes and skips the required minimum", () => {
+    const html = `<table><tr><td>Chemical resistance</td><td>ISO 10545-13</td><td>Class B min</td><td>A</td><td>LA</td><td>HA</td></tr>
+      <tr><td>DCOF</td><td>ANSI A326.3</td><td>≥ 0.42 wet</td><td>≥ 0.55 wet</td></tr></table>`;
+    const parsed = parseTechSpecsDetailed(html);
+    assert.equal(parsed.specs.chemicalResistance, "class a / la / ha");
+    assert.equal(parsed.specs.dcof, "≥ 0.42 wet | ≥ 0.55 wet");
+    assert.match(parsed.standards.chemicalResistance || "", /ISO 10545-13/);
+    assert.match(parsed.standards.dcof || "", /ANSI A326\.3/);
+  });
+
+  it("ignores a thickness tolerance and a bare 5 from 0,5 mm", () => {
+    const html = `<table><tr><td>Thickness</td><td>ISO 10545-2</td><td>± 0,5 mm</td><td>± 5 %</td></tr></table>
+      <p>spessore 9 mm</p><p>9 mm</p><p>9 mm</p>`;
+    const specs = parseTechSpecsFromHtml(html);
+    assert.equal(specs.thickness, "9mm");
+  });
+
+  it("reads Classe 5 as class 5, not class E", () => {
+    const specs = parseTechSpecItems([
+      item("Stain resistance", 120, 489),
+      item("Classe 5/Class 5", 455, 489),
+      item("S ≥ 1300 N (thickness ≥ 7,5 mm)", 290, 438),
+      item("9 mm", 400, 600),
+      item("9 mm", 400, 580),
+    ]);
+    assert.equal(specs.stainResistance, "class 5");
+    assert.equal(specs.thickness, "9mm");
+  });
+
+  it("keeps both wet DCOF thresholds when the greater-than sign extracts as t", () => {
+    const specs = parseTechSpecItems([
+      item("WET DCOF t0,42", 100, 200),
+      item("WET DCOF t0,55", 220, 200),
+    ]);
+    assert.equal(specs.dcof, "≥ 0.42 wet | ≥ 0.55 wet");
   });
 });
